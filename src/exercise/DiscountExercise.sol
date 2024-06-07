@@ -13,6 +13,7 @@ import {OptionsToken} from "../OptionsToken.sol";
 struct DiscountExerciseParams {
     uint256 maxPaymentAmount;
     uint256 deadline;
+    bool isInstantExit;
 }
 
 /// @title Options Token Exercise Contract
@@ -30,6 +31,7 @@ contract DiscountExercise is BaseExercise {
     error Exercise__PastDeadline();
     error Exercise__MultiplierOutOfRange();
     error Exercise__InvalidOracle();
+    error Exercise__FeeGreaterThanMax();
 
     /// Events
     event Exercised(address indexed sender, address indexed recipient, uint256 amount, uint256 paymentAmount);
@@ -41,7 +43,7 @@ contract DiscountExercise is BaseExercise {
 
     /// @notice The denominator for converting the multiplier into a decimal number.
     /// i.e. multiplier uses 4 decimals.
-    uint256 internal constant MULTIPLIER_DENOM = 10000;
+    uint256 internal constant BPS_DENOM = 10_000;
 
     /// Immutable parameters
 
@@ -63,7 +65,9 @@ contract DiscountExercise is BaseExercise {
 
     /// @notice The amount of payment tokens the user can claim
     /// Used when the contract does not have enough tokens to pay the user
-    mapping (address => uint256) public credit;
+    mapping(address => uint256) public credit;
+
+    uint256 public instantExitFee;
 
     constructor(
         OptionsToken oToken_,
@@ -72,6 +76,7 @@ contract DiscountExercise is BaseExercise {
         IERC20 underlyingToken_,
         IOracle oracle_,
         uint256 multiplier_,
+        uint256 instantExitFee_,
         address[] memory feeRecipients_,
         uint256[] memory feeBPS_
     ) BaseExercise(oToken_, feeRecipients_, feeBPS_) Owned(owner_) {
@@ -80,6 +85,7 @@ contract DiscountExercise is BaseExercise {
 
         _setOracle(oracle_);
         _setMultiplier(multiplier_);
+        _setInstantExitFee(instantExitFee_);
 
         emit SetOracle(oracle_);
     }
@@ -99,7 +105,14 @@ contract DiscountExercise is BaseExercise {
         onlyOToken
         returns (uint256 paymentAmount, address, uint256, uint256)
     {
-        return _exercise(from, amount, recipient, params);
+        DiscountExerciseParams memory _params = abi.decode(params, (DiscountExerciseParams));
+        if (_params.isInstantExit) {
+            return _instantExitExercise(from, amount, recipient, _params);
+        } 
+        else 
+        {
+            return _discountExercise(from, amount, recipient, _params);
+        }
     }
 
     function claim(address to) external {
@@ -119,8 +132,9 @@ contract DiscountExercise is BaseExercise {
 
     function _setOracle(IOracle oracle_) internal {
         (address paymentToken_, address underlyingToken_) = oracle_.getTokens();
-        if (paymentToken_ != address(paymentToken) || underlyingToken_ != address(underlyingToken))
+        if (paymentToken_ != address(paymentToken) || underlyingToken_ != address(underlyingToken)) {
             revert Exercise__InvalidOracle();
+        }
         oracle = oracle_;
         emit SetOracle(oracle_);
     }
@@ -133,30 +147,58 @@ contract DiscountExercise is BaseExercise {
 
     function _setMultiplier(uint256 multiplier_) internal {
         if (
-            multiplier_ > MULTIPLIER_DENOM * 2 // over 200%
-                || multiplier_ < MULTIPLIER_DENOM / 10 // under 10%
+            multiplier_ > BPS_DENOM * 2 // over 200%
+                || multiplier_ < BPS_DENOM / 10 // under 10%
         ) revert Exercise__MultiplierOutOfRange();
         multiplier = multiplier_;
         emit SetMultiplier(multiplier_);
     }
 
-    /// Internal functions
+    function setInstantExitFee(uint256 _instantExitFee) external onlyOwner {
+        _setInstantExitFee(_instantExitFee);
+    }
 
-    function _exercise(address from, uint256 amount, address recipient, bytes memory params)
+    function _setInstantExitFee(uint256 _instantExitFee) internal {
+        if (_instantExitFee > BPS_DENOM) {
+            revert Exercise__FeeGreaterThanMax();
+        }
+        instantExitFee = _instantExitFee;
+    }
+
+    /// Internal functions
+    function _instantExitExercise(address from, uint256 amount, address recipient, DiscountExerciseParams memory params)
         internal
         virtual
         returns (uint256 paymentAmount, address, uint256, uint256)
     {
-        // decode params
-        DiscountExerciseParams memory _params = abi.decode(params, (DiscountExerciseParams));
+        if (block.timestamp > params.deadline) revert Exercise__PastDeadline();
 
-        if (block.timestamp > _params.deadline) revert Exercise__PastDeadline();
+        uint256 underlyingAmount = amount.mulDivUp(multiplier, BPS_DENOM);
+        uint256 feeAmount = amount.mulDivUp(instantExitFee, BPS_DENOM);
+        underlyingAmount -= feeAmount;
+
+        // transfer underlying tokens from user to the set receivers
+        distributeFees(feeAmount, underlyingToken);
+        
+        // transfer underlying tokens to recipient
+        _pay(recipient, underlyingAmount);
+
+        emit Exercised(from, recipient, underlyingAmount, paymentAmount);
+    }
+
+    /// Internal functions
+    function _discountExercise(address from, uint256 amount, address recipient, DiscountExerciseParams memory params)
+        internal
+        virtual
+        returns (uint256 paymentAmount, address, uint256, uint256)
+    {
+        if (block.timestamp > params.deadline) revert Exercise__PastDeadline();
 
         // apply multiplier to price
-        uint256 price = oracle.getPrice().mulDivUp(multiplier, MULTIPLIER_DENOM);
+        uint256 price = oracle.getPrice().mulDivUp(multiplier, BPS_DENOM);
 
         paymentAmount = amount.mulWadUp(price);
-        if (paymentAmount > _params.maxPaymentAmount) revert Exercise__SlippageTooHigh();
+        if (paymentAmount > params.maxPaymentAmount) revert Exercise__SlippageTooHigh();
 
         // transfer payment tokens from user to the set receivers
         distributeFeesFrom(paymentAmount, paymentToken, from);
@@ -182,6 +224,6 @@ contract DiscountExercise is BaseExercise {
     /// @notice Returns the amount of payment tokens required to exercise the given amount of options tokens.
     /// @param amount The amount of options tokens to exercise
     function getPaymentAmount(uint256 amount) external view returns (uint256 paymentAmount) {
-        paymentAmount = amount.mulWadUp(oracle.getPrice().mulDivUp(multiplier, MULTIPLIER_DENOM));
+        paymentAmount = amount.mulWadUp(oracle.getPrice().mulDivUp(multiplier, BPS_DENOM));
     }
 }
