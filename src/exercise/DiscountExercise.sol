@@ -10,6 +10,10 @@ import {BaseExercise} from "../exercise/BaseExercise.sol";
 import {IOracle} from "../interfaces/IOracle.sol";
 import {OptionsToken} from "../OptionsToken.sol";
 
+import {ExchangeType, SwapProps, SwapHelper} from "../helpers/SwapHelper.sol";
+
+import "forge-std/console.sol";
+
 struct DiscountExerciseParams {
     uint256 maxPaymentAmount;
     uint256 deadline;
@@ -21,7 +25,7 @@ struct DiscountExerciseParams {
 /// @notice Contract that allows the holder of options tokens to exercise them,
 /// in this case, by purchasing the underlying token at a discount to the market price.
 /// @dev Assumes the underlying token and the payment token both use 18 decimals.
-contract DiscountExercise is BaseExercise {
+contract DiscountExercise is BaseExercise, SwapHelper {
     /// Library usage
     using SafeERC20 for IERC20;
     using FixedPointMathLib for uint256;
@@ -32,6 +36,9 @@ contract DiscountExercise is BaseExercise {
     error Exercise__MultiplierOutOfRange();
     error Exercise__InvalidOracle();
     error Exercise__FeeGreaterThanMax();
+    error Exercise__SlippageGreaterThanMax();
+    error Exercise__ParamHasAddressZero();
+    error Exercise__InvalidExchangeType(uint256);
 
     /// Events
     event Exercised(address indexed sender, address indexed recipient, uint256 amount, uint256 paymentAmount);
@@ -40,11 +47,6 @@ contract DiscountExercise is BaseExercise {
     event SetMultiplier(uint256 indexed newMultiplier);
 
     /// Constants
-
-    /// @notice The denominator for converting the multiplier into a decimal number.
-    /// i.e. multiplier uses 4 decimals.
-    uint256 internal constant BPS_DENOM = 10_000;
-
     /// Immutable parameters
 
     /// @notice The token paid by the options token holder during redemption
@@ -67,7 +69,9 @@ contract DiscountExercise is BaseExercise {
     /// Used when the contract does not have enough tokens to pay the user
     mapping(address => uint256) public credit;
 
-    uint256 public instantExitFee;
+    uint256 private feeAmount;
+    uint256 public minAmountToTriggerSwap;
+    uint256 public redeemBonus;
 
     constructor(
         OptionsToken oToken_,
@@ -76,16 +80,17 @@ contract DiscountExercise is BaseExercise {
         IERC20 underlyingToken_,
         IOracle oracle_,
         uint256 multiplier_,
-        uint256 instantExitFee_,
+        uint256 redeemBonus_,
         address[] memory feeRecipients_,
-        uint256[] memory feeBPS_
-    ) BaseExercise(oToken_, feeRecipients_, feeBPS_) Owned(owner_) {
+        uint256[] memory feeBPS_,
+        SwapProps memory swapProps_
+    ) BaseExercise(oToken_, feeRecipients_, feeBPS_) Owned(owner_) SwapHelper(swapProps_) {
         paymentToken = paymentToken_;
         underlyingToken = underlyingToken_;
 
         _setOracle(oracle_);
         _setMultiplier(multiplier_);
-        _setInstantExitFee(instantExitFee_);
+        _setRedeemBonus(redeemBonus_);
 
         emit SetOracle(oracle_);
     }
@@ -107,11 +112,9 @@ contract DiscountExercise is BaseExercise {
     {
         DiscountExerciseParams memory _params = abi.decode(params, (DiscountExerciseParams));
         if (_params.isInstantExit) {
-            return _instantExitExercise(from, amount, recipient, _params);
-        } 
-        else 
-        {
-            return _discountExercise(from, amount, recipient, _params);
+            return _zap(from, amount, recipient, _params);
+        } else {
+            return _redeem(from, amount, recipient, _params);
         }
     }
 
@@ -154,40 +157,62 @@ contract DiscountExercise is BaseExercise {
         emit SetMultiplier(multiplier_);
     }
 
-    function setInstantExitFee(uint256 _instantExitFee) external onlyOwner {
-        _setInstantExitFee(_instantExitFee);
+    function setRedeemBonus(uint256 _redeemBonus) external onlyOwner {
+        _setRedeemBonus(_redeemBonus);
     }
 
-    function _setInstantExitFee(uint256 _instantExitFee) internal {
-        if (_instantExitFee > BPS_DENOM) {
+    function _setRedeemBonus(uint256 _redeemBonus) internal {
+        if (_redeemBonus > BPS_DENOM) {
             revert Exercise__FeeGreaterThanMax();
         }
-        instantExitFee = _instantExitFee;
+        redeemBonus = _redeemBonus;
+    }
+
+    function setMinAmountToTriggerSwap(uint256 _minAmountToTriggerSwap) external onlyOwner {
+        minAmountToTriggerSwap = _minAmountToTriggerSwap;
     }
 
     /// Internal functions
-    function _instantExitExercise(address from, uint256 amount, address recipient, DiscountExerciseParams memory params)
+    function _zap(address from, uint256 amount, address recipient, DiscountExerciseParams memory params)
         internal
         virtual
         returns (uint256 paymentAmount, address, uint256, uint256)
     {
         if (block.timestamp > params.deadline) revert Exercise__PastDeadline();
 
-        uint256 underlyingAmount = amount.mulDivUp(multiplier, BPS_DENOM);
-        uint256 feeAmount = amount.mulDivUp(instantExitFee, BPS_DENOM);
-        underlyingAmount -= feeAmount;
+        uint256 discountedUnderlying = amount.mulDivUp(multiplier, BPS_DENOM);
+        uint256 fee = discountedUnderlying.mulDivUp(redeemBonus, BPS_DENOM);
+        uint256 underlyingAmount = discountedUnderlying - fee;
 
-        // transfer underlying tokens from user to the set receivers
-        distributeFees(feeAmount, underlyingToken);
-        
-        // transfer underlying tokens to recipient
+        console.log("Discounted: %e \t fee: %e", discountedUnderlying, fee);
+
+        // Fee amount in underlying tokens which is effect of not having redeem bonus
+        feeAmount += fee;
+        console.log("feeAmount: %s vs minAmountToTriggerSwap: %s", feeAmount, minAmountToTriggerSwap);
+
+        if (feeAmount >= minAmountToTriggerSwap) {
+            uint256 minAmountOut = _getMinAmountOutData(feeAmount, swapProps.maxSwapSlippage, address(oracle));
+            console.log("minAmountOut: ", minAmountOut);
+            /* Approve the underlying token to make swap */
+            underlyingToken.approve(swapProps.swapper, feeAmount);
+            /* Swap underlying token to payment token (asset) */
+            console.log("under before: %e", underlyingToken.balanceOf(address(this)));
+            _generalSwap(swapProps.exchangeTypes, address(underlyingToken), address(paymentToken), feeAmount, minAmountOut, swapProps.exchangeAddress);
+            feeAmount = 0;
+            // transfer payment tokens from user to the set receivers
+            console.log("Fee recipients: ", feeRecipients.length);
+            distributeFees(paymentToken.balanceOf(address(this)), paymentToken);
+        }
+
+        // transfer underlying tokens to recipient without the bonus
+        console.log("Transferring underlying : %e", underlyingAmount);
         _pay(recipient, underlyingAmount);
 
         emit Exercised(from, recipient, underlyingAmount, paymentAmount);
     }
 
     /// Internal functions
-    function _discountExercise(address from, uint256 amount, address recipient, DiscountExerciseParams memory params)
+    function _redeem(address from, uint256 amount, address recipient, DiscountExerciseParams memory params)
         internal
         virtual
         returns (uint256 paymentAmount, address, uint256, uint256)
@@ -195,9 +220,7 @@ contract DiscountExercise is BaseExercise {
         if (block.timestamp > params.deadline) revert Exercise__PastDeadline();
 
         // apply multiplier to price
-        uint256 price = oracle.getPrice().mulDivUp(multiplier, BPS_DENOM);
-
-        paymentAmount = amount.mulWadUp(price);
+        paymentAmount = _getPaymentAmount(amount);
         if (paymentAmount > params.maxPaymentAmount) revert Exercise__SlippageTooHigh();
 
         // transfer payment tokens from user to the set receivers
@@ -224,6 +247,12 @@ contract DiscountExercise is BaseExercise {
     /// @notice Returns the amount of payment tokens required to exercise the given amount of options tokens.
     /// @param amount The amount of options tokens to exercise
     function getPaymentAmount(uint256 amount) external view returns (uint256 paymentAmount) {
+        return _getPaymentAmount(amount);
+    }
+
+    function _getPaymentAmount(uint256 amount) private view returns (uint256 paymentAmount) {
+        console.log("Price inside: ", oracle.getPrice());
         paymentAmount = amount.mulWadUp(oracle.getPrice().mulDivUp(multiplier, BPS_DENOM));
+        // paymentAmount -= paymentAmount.mulDivUp(redeemBonus, BPS_DENOM); // redeem bonus applied
     }
 }

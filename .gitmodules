@@ -19,3 +19,6 @@
 [submodule "lib/tarot-price-oracle"]
 	path = lib/tarot-price-oracle
 	url = https://github.com/xrave110/tarot-price-oracle
+[submodule "lib/vault-v2"]
+	path = lib/vault-v2
+	url = https://github.com/Byte-Masons/vault-v2
