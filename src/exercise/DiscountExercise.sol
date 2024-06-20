@@ -3,6 +3,7 @@ pragma solidity ^0.8.13;
 
 import {Owned} from "solmate/auth/Owned.sol";
 import {IERC20} from "oz/token/ERC20/IERC20.sol";
+import {Pausable} from "oz/security/Pausable.sol";
 import {SafeERC20} from "oz/token/ERC20/utils/SafeERC20.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 
@@ -25,7 +26,7 @@ struct DiscountExerciseParams {
 /// @notice Contract that allows the holder of options tokens to exercise them,
 /// in this case, by purchasing the underlying token at a discount to the market price.
 /// @dev Assumes the underlying token and the payment token both use 18 decimals.
-contract DiscountExercise is BaseExercise, SwapHelper {
+contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
     /// Library usage
     using SafeERC20 for IERC20;
     using FixedPointMathLib for uint256;
@@ -69,9 +70,14 @@ contract DiscountExercise is BaseExercise, SwapHelper {
     /// Used when the contract does not have enough tokens to pay the user
     mapping(address => uint256) public credit;
 
+    /// @notice The fee amount gathered in the contract to be swapped and distributed
     uint256 private feeAmount;
+
+    /// @notice Minimal trigger to swap, if the trigger is not reached then feeAmount counts the ammount to swap and distribute
     uint256 public minAmountToTriggerSwap;
-    uint256 public redeemBonus;
+
+    /// @notice configurable parameter that determines what is the fee for zap (instant exit) feature
+    uint256 public instantExitFee;
 
     constructor(
         OptionsToken oToken_,
@@ -80,7 +86,7 @@ contract DiscountExercise is BaseExercise, SwapHelper {
         IERC20 underlyingToken_,
         IOracle oracle_,
         uint256 multiplier_,
-        uint256 redeemBonus_,
+        uint256 instantExitFee_,
         address[] memory feeRecipients_,
         uint256[] memory feeBPS_,
         SwapProps memory swapProps_
@@ -90,7 +96,7 @@ contract DiscountExercise is BaseExercise, SwapHelper {
 
         _setOracle(oracle_);
         _setMultiplier(multiplier_);
-        _setRedeemBonus(redeemBonus_);
+        _setInstantExitFee(instantExitFee_);
 
         emit SetOracle(oracle_);
     }
@@ -157,15 +163,15 @@ contract DiscountExercise is BaseExercise, SwapHelper {
         emit SetMultiplier(multiplier_);
     }
 
-    function setRedeemBonus(uint256 _redeemBonus) external onlyOwner {
-        _setRedeemBonus(_redeemBonus);
+    function setInstantExitFee(uint256 _instantExitFee) external onlyOwner {
+        _setInstantExitFee(_instantExitFee);
     }
 
-    function _setRedeemBonus(uint256 _redeemBonus) internal {
-        if (_redeemBonus > BPS_DENOM) {
+    function _setInstantExitFee(uint256 _instantExitFee) internal {
+        if (_instantExitFee > BPS_DENOM) {
             revert Exercise__FeeGreaterThanMax();
         }
-        redeemBonus = _redeemBonus;
+        instantExitFee = _instantExitFee;
     }
 
     function setMinAmountToTriggerSwap(uint256 _minAmountToTriggerSwap) external onlyOwner {
@@ -181,7 +187,7 @@ contract DiscountExercise is BaseExercise, SwapHelper {
         if (block.timestamp > params.deadline) revert Exercise__PastDeadline();
 
         uint256 discountedUnderlying = amount.mulDivUp(multiplier, BPS_DENOM);
-        uint256 fee = discountedUnderlying.mulDivUp(redeemBonus, BPS_DENOM);
+        uint256 fee = discountedUnderlying.mulDivUp(instantExitFee, BPS_DENOM);
         uint256 underlyingAmount = discountedUnderlying - fee;
 
         console.log("Discounted: %e \t fee: %e", discountedUnderlying, fee);
