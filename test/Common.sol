@@ -98,6 +98,7 @@ address constant MODE_WETH = 0x4200000000000000000000000000000000000006;
 address constant MODE_VELO_USDC_MODE_PAIR = 0x283bA4E204DFcB6381BCBf2cb5d0e765A2B57bC2; // DECIMALS ISSUE
 address constant MODE_VELO_WETH_MODE_PAIR = 0x0fba984c97539B3fb49ACDA6973288D0EFA903DB;
 address constant MODE_VELO_ROUTER = 0x3a63171DD9BebF4D07BC782FECC7eb0b890C2A45;
+address constant MODE_VELO_FACTORY = 0x31832f2a97Fd20664D76Cc421207669b55CE4BC0;
 
 contract Common is Test {
     IERC20 nativeToken;
@@ -115,6 +116,7 @@ contract Common is Test {
     bytes32 paymentUnderlyingBpt;
     bytes32 paymentWantBpt;
 
+    address veloFactory;
     address pool;
     address addressProvider;
     address dataProvider;
@@ -177,9 +179,9 @@ contract Common is Test {
         } else if (exchangeType == ExchangeType.VeloSolid) {
             /* Configure thena ram like dexes */
             IVeloRouter.Route[] memory veloPath = new IVeloRouter.Route[](1);
-            veloPath[0] = IVeloRouter.Route(paths[0], paths[1], false, OP_VELO_FACTORY);
+            veloPath[0] = IVeloRouter.Route(paths[0], paths[1], false, veloFactory);
             reaperSwapper.updateVeloSwapPath(paths[0], paths[1], address(veloRouter), veloPath);
-            veloPath[0] = IVeloRouter.Route(paths[1], paths[0], false, OP_VELO_FACTORY);
+            veloPath[0] = IVeloRouter.Route(paths[1], paths[0], false, veloFactory);
             reaperSwapper.updateVeloSwapPath(paths[1], paths[0], address(veloRouter), veloPath);
         } else if (exchangeType == ExchangeType.UniV3) {
             /* Configure univ3 like dexes */

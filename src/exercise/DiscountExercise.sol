@@ -40,12 +40,16 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
     error Exercise__SlippageGreaterThanMax();
     error Exercise__ParamHasAddressZero();
     error Exercise__InvalidExchangeType(uint256);
+    error Exercise__FeeDistributionFailed();
 
     /// Events
     event Exercised(address indexed sender, address indexed recipient, uint256 amount, uint256 paymentAmount);
     event SetOracle(IOracle indexed newOracle);
     event SetTreasury(address indexed newTreasury);
     event SetMultiplier(uint256 indexed newMultiplier);
+    event Claimed(uint256 indexed amount);
+    event SetInstantFee(uint256 indexed instantFee);
+    event SetMinAmountToTrigger(uint256 minAmountToTrigger);
 
     /// Constants
     /// Immutable parameters
@@ -114,6 +118,7 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
         virtual
         override
         onlyOToken
+        whenNotPaused
         returns (uint256 paymentAmount, address, uint256, uint256)
     {
         DiscountExerciseParams memory _params = abi.decode(params, (DiscountExerciseParams));
@@ -124,11 +129,12 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
         }
     }
 
-    function claim(address to) external {
+    function claim(address to) external whenNotPaused {
         uint256 amount = credit[msg.sender];
         if (amount == 0) return;
         credit[msg.sender] = 0;
         underlyingToken.safeTransfer(to, amount);
+        emit Claimed(amount);
     }
 
     /// Owner functions
@@ -172,10 +178,20 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
             revert Exercise__FeeGreaterThanMax();
         }
         instantExitFee = _instantExitFee;
+        emit SetInstantFee(_instantExitFee);
     }
 
     function setMinAmountToTriggerSwap(uint256 _minAmountToTriggerSwap) external onlyOwner {
         minAmountToTriggerSwap = _minAmountToTriggerSwap;
+        emit SetMinAmountToTrigger(_minAmountToTriggerSwap);
+    }
+
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
     }
 
     /// Internal functions
@@ -185,13 +201,13 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
         returns (uint256 paymentAmount, address, uint256, uint256)
     {
         if (block.timestamp > params.deadline) revert Exercise__PastDeadline();
-
+        console.log("[IN] Amount: %e\tmultiplier: %e", amount, multiplier);
         uint256 discountedUnderlying = amount.mulDivUp(multiplier, BPS_DENOM);
         uint256 fee = discountedUnderlying.mulDivUp(instantExitFee, BPS_DENOM);
         uint256 underlyingAmount = discountedUnderlying - fee;
 
         console.log("Discounted: %e \t fee: %e", discountedUnderlying, fee);
-
+        console.log("Fee amount before: %e", feeAmount);
         // Fee amount in underlying tokens which is effect of not having redeem bonus
         feeAmount += fee;
         console.log("feeAmount: %s vs minAmountToTriggerSwap: %s", feeAmount, minAmountToTriggerSwap);
@@ -200,7 +216,7 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
             uint256 minAmountOut = _getMinAmountOutData(feeAmount, swapProps.maxSwapSlippage, address(oracle));
             console.log("minAmountOut: ", minAmountOut);
             /* Approve the underlying token to make swap */
-            underlyingToken.approve(swapProps.swapper, feeAmount);
+            underlyingToken.safeApprove(swapProps.swapper, feeAmount);
             /* Swap underlying token to payment token (asset) */
             console.log("under before: %e", underlyingToken.balanceOf(address(this)));
             _generalSwap(swapProps.exchangeTypes, address(underlyingToken), address(paymentToken), feeAmount, minAmountOut, swapProps.exchangeAddress);
@@ -208,10 +224,12 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
             // transfer payment tokens from user to the set receivers
             console.log("Fee recipients: ", feeRecipients.length);
             distributeFees(paymentToken.balanceOf(address(this)), paymentToken);
+            if (paymentToken.balanceOf(feeRecipients[0]) == 0 || paymentToken.balanceOf(feeRecipients[1]) == 0) {
+                revert Exercise__FeeDistributionFailed();
+            }
         }
 
         // transfer underlying tokens to recipient without the bonus
-        console.log("Transferring underlying : %e", underlyingAmount);
         _pay(recipient, underlyingAmount);
 
         emit Exercised(from, recipient, underlyingAmount, paymentAmount);

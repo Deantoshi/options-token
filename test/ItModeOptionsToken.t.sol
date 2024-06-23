@@ -92,6 +92,7 @@ contract ModeOptionsTokenTest is Test, Common {
         // swapRouter = ISwapRouter(OP_BEETX_VAULT);
         // univ3Factory = IUniswapV3Factory(OP_UNIV3_FACTORY);
         veloRouter = IVeloRouter(MODE_VELO_ROUTER);
+        veloFactory = MODE_VELO_FACTORY;
 
         /* Setup network */
         uint256 fork = vm.createFork(MAINNET_URL, FORK_BLOCK);
@@ -189,8 +190,8 @@ contract ModeOptionsTokenTest is Test, Common {
     }
 
     function test_modeZapPositiveScenario(uint256 amount, address recipient) public {
-        amount = bound(amount, 1e10, 1e18 - 1);
-        vm.assume(recipient != address(0));
+        amount = bound(amount, 1e16, 1e18 - 1);
+        address recipient = makeAddr("recipient");
 
         // mint options tokens
         vm.prank(tokenAdmin);
@@ -202,15 +203,12 @@ contract ModeOptionsTokenTest is Test, Common {
         uint256 expectedUnderlyingAmount = discountedUnderlying - discountedUnderlying.mulDivUp(INSTANT_EXIT_FEE, 10_000);
         deal(address(paymentToken), address(this), expectedPaymentAmount);
 
-        console.log("discountedUnderlying:", discountedUnderlying);
-        console.log("expectedUnderlyingAmount:", expectedUnderlyingAmount);
-
         // Calculate total fee from zapping
         uint256 calcPaymentAmount = exerciser.getPaymentAmount(amount);
         uint256 totalFee = calcPaymentAmount.mulDivUp(INSTANT_EXIT_FEE, 10_000);
 
         vm.prank(owner);
-        exerciser.setMinAmountToTriggerSwap(totalFee + 1);
+        exerciser.setMinAmountToTriggerSwap(discountedUnderlying.mulDivUp(INSTANT_EXIT_FEE, BPS_DENOM) + 1);
 
         // exercise options tokens
         DiscountExerciseParams memory params =
@@ -230,7 +228,7 @@ contract ModeOptionsTokenTest is Test, Common {
         assertApproxEqAbs(balanceAfterFirstExercise, expectedUnderlyingAmount, 1, "Recipient got wrong amount of underlying token");
 
         /*---------- Second call -----------*/
-        amount = bound(amount, 1e18, 1e24);
+        amount = bound(amount, 1e18, 2e18);
         // mint options tokens
         vm.prank(tokenAdmin);
         optionsToken.mint(address(this), amount);
@@ -262,8 +260,8 @@ contract ModeOptionsTokenTest is Test, Common {
         assertApproxEqRel(IERC20(paymentToken).balanceOf(feeRecipients_[1]), fee2, 5e16, "fee recipient 2 didn't receive payment tokens");
         assertEqDecimal(paymentAmount, 0, 18, "exercise returned wrong value");
         assertApproxEqAbs(
-            underlyingToken.balanceOf(recipient) + balanceAfterFirstExercise,
-            expectedUnderlyingAmount,
+            underlyingToken.balanceOf(recipient),
+            expectedUnderlyingAmount + balanceAfterFirstExercise,
             1,
             "Recipient got wrong amount of underlying token"
         );

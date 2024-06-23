@@ -72,15 +72,12 @@ abstract contract SwapHelper {
         ISwapperSwaps _swapper = ISwapperSwaps(swapProps.swapper);
         MinAmountOutData memory minAmountOutData = MinAmountOutData(MinAmountOutKind.Absolute, minAmountOut);
         if (exType == ExchangeType.UniV2) {
-            console.log("Calling Univ2");
             _swapper.swapUniV2(tokenIn, tokenOut, amount, minAmountOutData, exchangeAddress);
         } else if (exType == ExchangeType.Bal) {
             _swapper.swapBal(tokenIn, tokenOut, amount, minAmountOutData, exchangeAddress);
-            console.log("HERE");
         } else if (exType == ExchangeType.VeloSolid) {
             _swapper.swapVelo(tokenIn, tokenOut, amount, minAmountOutData, exchangeAddress);
         } else if (exType == ExchangeType.UniV3) {
-            console.log("Calling Univ3");
             _swapper.swapUniV3(tokenIn, tokenOut, amount, minAmountOutData, exchangeAddress);
         } else {
             revert SwapHelper__InvalidExchangeType(uint256(exType));

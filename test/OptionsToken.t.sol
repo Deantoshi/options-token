@@ -356,4 +356,37 @@ contract OptionsTokenTest is Test {
         vm.expectRevert(OptionsToken.OptionsToken__NotExerciseContract.selector);
         optionsToken.exercise(amount, recipient, address(exerciser), abi.encode(params));
     }
+
+    function test_exerciseWhenPaused(uint256 amount) public {
+        amount = bound(amount, 100, 1 ether);
+        address recipient = makeAddr("recipient");
+
+        // mint options tokens
+        vm.prank(tokenAdmin);
+        optionsToken.mint(address(this), 3 * amount);
+
+        // mint payment tokens
+        uint256 expectedPaymentAmount = 3 * amount.mulWadUp(oracle.getPrice().mulDivUp(PRICE_MULTIPLIER, ORACLE_MIN_PRICE_DENOM));
+        deal(address(paymentToken), address(this), expectedPaymentAmount);
+
+        // exercise options tokens
+        DiscountExerciseParams memory params =
+            DiscountExerciseParams({maxPaymentAmount: expectedPaymentAmount, deadline: type(uint256).max, isInstantExit: false});
+        optionsToken.exercise(amount, recipient, address(exerciser), abi.encode(params));
+
+        /* Only owner can pause */
+        vm.startPrank(recipient);
+        vm.expectRevert(bytes("UNAUTHORIZED")); // Ownable: caller is not the owner
+        exerciser.pause();
+        vm.stopPrank();
+
+        vm.prank(owner);
+        exerciser.pause();
+        vm.expectRevert(bytes("Pausable: paused"));
+        optionsToken.exercise(amount, recipient, address(exerciser), abi.encode(params));
+
+        vm.prank(owner);
+        exerciser.unpause();
+        optionsToken.exercise(amount, recipient, address(exerciser), abi.encode(params));
+    }
 }
