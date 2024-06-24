@@ -1,12 +1,10 @@
-// SPDX-License-Identifier: BUSL-1.1
+// SPDX-License-Identifier: AGPL-3.0
 
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.13;
 
 import {ISwapperSwaps, MinAmountOutData, MinAmountOutKind} from "vault-v2/ReaperSwapper.sol";
 import {IOracle} from "../interfaces/IOracle.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
-
-import "forge-std/console.sol";
 
 enum ExchangeType {
     UniV2,
@@ -30,19 +28,15 @@ abstract contract SwapHelper {
     uint256 internal constant BPS_DENOM = 10_000;
     SwapProps public swapProps;
 
-    error NotAnOwner();
     error SwapHelper__SlippageGreaterThanMax();
     error SwapHelper__ParamHasAddressZero();
-    error SwapHelper__AddressZero();
     error SwapHelper__InvalidExchangeType(uint256 exType);
 
     constructor(SwapProps memory _swapProps) {
         _configSwapProps(_swapProps);
     }
 
-    function configSwapProps(SwapProps memory _swapProps) external virtual {
-        _configSwapProps(_swapProps);
-    }
+    function configSwapProps(SwapProps memory _swapProps) external virtual;
 
     function _configSwapProps(SwapProps memory _swapProps) internal {
         if (_swapProps.maxSwapSlippage > BPS_DENOM) {

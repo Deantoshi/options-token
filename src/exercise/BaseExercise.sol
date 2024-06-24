@@ -8,8 +8,6 @@ import {IERC20} from "oz/token/ERC20/IERC20.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Owned} from "solmate/auth/Owned.sol";
 
-import "forge-std/console.sol";
-
 abstract contract BaseExercise is IExercise, Owned {
     using SafeERC20 for IERC20;
     using FixedPointMathLib for uint256;
@@ -88,9 +86,7 @@ abstract contract BaseExercise is IExercise, Owned {
     function distributeFees(uint256 totalAmount, IERC20 token) internal virtual {
         uint256 remaining = totalAmount;
         for (uint256 i = 0; i < feeRecipients.length - 1; i++) {
-            
             uint256 feeAmount = totalAmount * feeBPS[i] / FEE_DENOMINATOR;
-            console.log("feeBPS: %e feeAmount: %e", feeBPS[i], feeAmount);
             token.safeTransfer(feeRecipients[i], feeAmount);
             remaining -= feeAmount;
         }

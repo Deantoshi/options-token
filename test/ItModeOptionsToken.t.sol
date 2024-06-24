@@ -23,61 +23,14 @@ contract ModeOptionsTokenTest is Test, Common {
 
     uint256 constant FORK_BLOCK = 9260950;
     string MAINNET_URL = vm.envString("MODE_RPC_URL");
-
-    uint16 constant PRICE_MULTIPLIER = 5000; // 0.5
-    uint56 constant ORACLE_SECS = 30 minutes;
-    uint56 constant ORACLE_AGO = 2 minutes;
-    uint128 constant ORACLE_MIN_PRICE = 1e17;
-    uint56 constant ORACLE_LARGEST_SAFETY_WINDOW = 24 hours;
     uint256 constant ORACLE_INIT_TWAP_VALUE = 1e19;
     uint128 constant ORACLE_MIN_PRICE_DENOM = 10000;
-
-    uint256 constant MAX_SUPPLY = 1e27; // the max supply of the options token & the underlying token
-    uint256 constant INSTANT_EXIT_FEE = 500;
 
     address[] feeRecipients_;
     uint256[] feeBPS_;
 
     ThenaOracle oracle;
     MockBalancerTwapOracle balancerTwapOracle;
-
-    // function fixture_getSwapProps(ExchangeType exchangeType, uint256 slippage) public view returns (SwapProps memory) {
-    //     SwapProps memory swapProps;
-
-    //     if (exchangeType == ExchangeType.ThenaRam) {
-    //         swapProps = SwapProps(address(reaperSwapper), BSC_THENA_ROUTER, ExchangeType.ThenaRam, slippage);
-    //     } else if (exchangeType == ExchangeType.UniV3) {
-    //         swapProps = SwapProps(address(reaperSwapper), BSC_UNIV3_ROUTERV2, ExchangeType.UniV3, slippage);
-    //     } else {
-    //         // revert
-    //     }
-    //     return swapProps;
-    // }
-
-    // function fixture_updateSwapperPaths(ExchangeType exchangeType) public {
-    //     address[2] memory paths = [address(underlyingToken), address(paymentToken)];
-
-    //     if (exchangeType == ExchangeType.ThenaRam) {
-    //         /* Configure thena ram like dexes */
-    //         IThenaRamRouter.route[] memory thenaPath = new IThenaRamRouter.route[](1);
-    //         thenaPath[0] = IThenaRamRouter.route(paths[0], paths[1], false);
-    //         reaperSwapper.updateThenaRamSwapPath(paths[0], paths[1], address(BSC_THENA_ROUTER), thenaPath);
-    //         thenaPath[0] = IThenaRamRouter.route(paths[1], paths[0], false);
-    //         reaperSwapper.updateThenaRamSwapPath(paths[1], paths[0], address(BSC_THENA_ROUTER), thenaPath);
-    //     } else if (exchangeType == ExchangeType.UniV3) {
-    //         /* Configure univ3 like dexes */
-    //         uint24[] memory univ3Fees = new uint24[](1);
-    //         univ3Fees[0] = 500;
-    //         address[] memory univ3Path = new address[](2);
-
-    //         univ3Path[0] = paths[0];
-    //         univ3Path[1] = paths[1];
-    //         UniV3SwapData memory swapPathAndFees = UniV3SwapData(univ3Path, univ3Fees);
-    //         reaperSwapper.updateUniV3SwapPath(paths[0], paths[1], address(BSC_UNIV3_ROUTERV2), swapPathAndFees);
-    //     } else {
-    //         // revert
-    //     }
-    // }
 
     function setUp() public {
         /* Common assignments */
@@ -102,6 +55,8 @@ contract ModeOptionsTokenTest is Test, Common {
         owner = makeAddr("owner");
         tokenAdmin = makeAddr("tokenAdmin");
 
+        uint256 minAmountToTriggerSwap = 1e5;
+
         feeRecipients_ = new address[](2);
         feeRecipients_[0] = makeAddr("feeRecipient");
         feeRecipients_[1] = makeAddr("feeRecipient2");
@@ -124,9 +79,9 @@ contract ModeOptionsTokenTest is Test, Common {
         reaperSwapper = ReaperSwapper(address(tmpProxy));
         reaperSwapper.initialize(strategists, address(this), address(this));
 
-        fixture_updateSwapperPaths(ExchangeType.VeloSolid);
+        fixture_updateSwapperPaths(exchangeType);
 
-        SwapProps memory swapProps = fixture_getSwapProps(ExchangeType.VeloSolid, 200);
+        SwapProps memory swapProps = fixture_getSwapProps(exchangeType, 200);
 
         address[] memory tokens = new address[](2);
         tokens[0] = address(paymentToken);
@@ -143,13 +98,14 @@ contract ModeOptionsTokenTest is Test, Common {
             oracle,
             PRICE_MULTIPLIER,
             INSTANT_EXIT_FEE,
+            minAmountToTriggerSwap,
             feeRecipients_,
             feeBPS_,
             swapProps
         );
         deal(address(underlyingToken), address(exerciser), 1e20 ether);
 
-        // add exerciser to the list of options
+        /* add exerciser to the list of options */
         vm.startPrank(owner);
         optionsToken.setExerciseContract(address(exerciser), true);
         vm.stopPrank();
@@ -159,9 +115,9 @@ contract ModeOptionsTokenTest is Test, Common {
         paymentToken.approve(address(exerciser), type(uint256).max);
     }
 
-    function test_modeRedeemPositiveScenario(uint256 amount, address recipient) public {
+    function test_modeRedeemPositiveScenario(uint256 amount) public {
         amount = bound(amount, 100, MAX_SUPPLY);
-        vm.assume(recipient != address(0));
+        address recipient = makeAddr("recipient");
 
         // mint options tokens
         vm.prank(tokenAdmin);
@@ -189,7 +145,7 @@ contract ModeOptionsTokenTest is Test, Common {
         assertEqDecimal(expectedPaymentAmount, paymentAmount, 18, "exercise returned wrong value");
     }
 
-    function test_modeZapPositiveScenario(uint256 amount, address recipient) public {
+    function test_modeZapPositiveScenario(uint256 amount) public {
         amount = bound(amount, 1e16, 1e18 - 1);
         address recipient = makeAddr("recipient");
 
@@ -220,12 +176,12 @@ contract ModeOptionsTokenTest is Test, Common {
 
         // verify payment tokens were not transferred
         assertEq(paymentToken.balanceOf(address(this)), expectedPaymentAmount, "user lost payment tokens during instant exit");
-        //verify whether distributions not happened
+        // verify whether distributions not happened
         assertEq(IERC20(paymentToken).balanceOf(feeRecipients_[0]), 0, "fee recipient 1 received payment tokens but shouldn't");
         assertEq(IERC20(paymentToken).balanceOf(feeRecipients_[1]), 0, "fee recipient 2 received payment tokens but shouldn't");
         assertEqDecimal(paymentAmount, 0, 18, "exercise returned wrong value");
         uint256 balanceAfterFirstExercise = underlyingToken.balanceOf(recipient);
-        assertApproxEqAbs(balanceAfterFirstExercise, expectedUnderlyingAmount, 1, "Recipient got wrong amount of underlying token");
+        assertApproxEqAbs(balanceAfterFirstExercise, expectedUnderlyingAmount, 1, "recipient got wrong amount of underlying token");
 
         /*---------- Second call -----------*/
         amount = bound(amount, 1e18, 2e18);
@@ -267,89 +223,9 @@ contract ModeOptionsTokenTest is Test, Common {
         );
     }
 
-    // function test_priceMultiplier(uint256 amount, uint256 multiplier) public {
-    //     amount = bound(amount, 1, MAX_SUPPLY / 2);
-
-    //     vm.prank(owner);
-    //     exerciser.setMultiplier(10000); // full price
-
-    //     // mint options tokens
-    //     vm.prank(tokenAdmin);
-    //     optionsToken.mint(address(this), amount * 2);
-
-    //     // mint payment tokens
-    //     uint256 expectedPaymentAmount = amount.mulWadUp(ORACLE_INIT_TWAP_VALUE);
-    //     deal(address(paymentToken), address(this), expectedPaymentAmount);
-
-    //     // exercise options tokens
-    //     DiscountExerciseParams memory params =
-    //         DiscountExerciseParams({maxPaymentAmount: expectedPaymentAmount, deadline: type(uint256).max, isInstantExit: false});
-    //     (uint256 paidAmount,,,) = optionsToken.exercise(amount, address(this), address(exerciser), abi.encode(params));
-
-    //     // update multiplier
-    //     multiplier = bound(multiplier, 1000, 20000);
-    //     vm.prank(owner);
-    //     exerciser.setMultiplier(multiplier);
-
-    //     // exercise options tokens
-    //     uint256 newPrice = oracle.getPrice().mulDivUp(multiplier, 10000);
-    //     uint256 newExpectedPaymentAmount = amount.mulWadUp(newPrice);
-    //     params.maxPaymentAmount = newExpectedPaymentAmount;
-
-    //     deal(address(paymentToken), address(this), newExpectedPaymentAmount);
-    //     (uint256 newPaidAmount,,,) = optionsToken.exercise(amount, address(this), address(exerciser), abi.encode(params));
-    //     // verify payment tokens were transferred
-    //     assertEqDecimal(paymentToken.balanceOf(address(this)), 0, 18, "user still has payment tokens");
-    //     assertEq(newPaidAmount, paidAmount.mulDivUp(multiplier, 10000), "incorrect discount");
-    // }
-
-    // function test_exerciseTwapOracleNotReady(uint256 amount, address recipient) public {
-    //     amount = bound(amount, 1, MAX_SUPPLY);
-
-    //     // mint options tokens
-    //     vm.prank(tokenAdmin);
-    //     optionsToken.mint(address(this), amount);
-
-    //     // mint payment tokens
-    //     uint256 expectedPaymentAmount = amount.mulWadUp(ORACLE_INIT_TWAP_VALUE.mulDivUp(PRICE_MULTIPLIER, ORACLE_MIN_PRICE_DENOM));
-    //     deal(address(paymentToken), address(this), expectedPaymentAmount);
-
-    //     // update oracle params
-    //     // such that the TWAP window becomes (block.timestamp - ORACLE_LARGEST_SAFETY_WINDOW - ORACLE_SECS, block.timestamp - ORACLE_LARGEST_SAFETY_WINDOW]
-    //     // which is outside of the largest safety window
-    //     // vm.prank(owner);
-    //     // oracle.setParams(ORACLE_SECS, ORACLE_LARGEST_SAFETY_WINDOW, ORACLE_MIN_PRICE);
-
-    //     // exercise options tokens which should fail
-    //     DiscountExerciseParams memory params =
-    //         DiscountExerciseParams({maxPaymentAmount: expectedPaymentAmount, deadline: type(uint256).max, isInstantExit: false});
-    //     vm.expectRevert(ThenaOracle.ThenaOracle__TWAPOracleNotReady.selector);
-    //     optionsToken.exercise(amount, recipient, address(exerciser), abi.encode(params));
-    // }
-
-    // function test_exercisePastDeadline(uint256 amount, address recipient, uint256 deadline) public {
-    //     amount = bound(amount, 0, MAX_SUPPLY);
-    //     deadline = bound(deadline, 0, block.timestamp - 1);
-
-    //     // mint options tokens
-    //     vm.prank(tokenAdmin);
-    //     optionsToken.mint(address(this), amount);
-
-    //     // mint payment tokens
-    //     uint256 expectedPaymentAmount = amount.mulWadUp(ORACLE_INIT_TWAP_VALUE.mulDivUp(PRICE_MULTIPLIER, ORACLE_MIN_PRICE_DENOM));
-    //     deal(address(paymentToken), address(this), expectedPaymentAmount);
-
-    //     // exercise options tokens
-    //     DiscountExerciseParams memory params =
-    //         DiscountExerciseParams({maxPaymentAmount: expectedPaymentAmount, deadline: deadline, isInstantExit: false});
-    //     if (amount != 0) {
-    //         vm.expectRevert(DiscountExercise.Exercise__PastDeadline.selector);
-    //     }
-    //     optionsToken.exercise(amount, recipient, address(exerciser), abi.encode(params));
-    // }
-
-    function test_modeExerciseNotOToken(uint256 amount, address recipient) public {
+    function test_modeExerciseNotOToken(uint256 amount) public {
         amount = bound(amount, 0, MAX_SUPPLY);
+        address recipient = makeAddr("recipient");
 
         // mint options tokens
         vm.prank(tokenAdmin);
@@ -365,8 +241,9 @@ contract ModeOptionsTokenTest is Test, Common {
         exerciser.exercise(address(this), amount, recipient, abi.encode(params));
     }
 
-    function test_modeExerciseNotExerciseContract(uint256 amount, address recipient) public {
+    function test_modeExerciseNotExerciseContract(uint256 amount) public {
         amount = bound(amount, 1, MAX_SUPPLY);
+        address recipient = makeAddr("recipient");
 
         // mint options tokens
         vm.prank(tokenAdmin);

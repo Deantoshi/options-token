@@ -68,6 +68,7 @@ contract OptionsTokenTest is Test {
         /* Reaper deployment and configuration */
 
         uint256 slippage = 500; // 5%
+        uint256 minAmountToTriggerSwap = 1e5;
 
         address[] memory tokens = new address[](2);
         tokens[0] = address(paymentToken);
@@ -91,6 +92,7 @@ contract OptionsTokenTest is Test {
             oracle,
             PRICE_MULTIPLIER,
             INSTANT_EXIT_FEE,
+            minAmountToTriggerSwap,
             feeRecipients_,
             feeBPS_,
             swapProps
@@ -124,9 +126,9 @@ contract OptionsTokenTest is Test {
         assertEqDecimal(optionsToken.balanceOf(address(this)), amount, 18);
     }
 
-    function test_discountExerciseHappyPath(uint256 amount, address recipient) public {
+    function test_discountExerciseHappyPath(uint256 amount) public {
         amount = bound(amount, 100, MAX_SUPPLY);
-        vm.assume(recipient != address(0));
+        address recipient = makeAddr("recipient");
 
         // mint options tokens
         vm.prank(tokenAdmin);
@@ -154,12 +156,9 @@ contract OptionsTokenTest is Test {
         assertEqDecimal(expectedPaymentAmount, paymentAmount, 18, "exercise returned wrong value");
     }
 
-    function test_instantExitExerciseHappyPath(uint256 amount, address recipient) public {
+    function test_instantExitExerciseHappyPath(uint256 amount) public {
         amount = bound(amount, 1e16, 1e22);
-        vm.assume(
-            recipient != address(0) && recipient != feeRecipients_[0] && recipient != feeRecipients_[1] && recipient != address(this)
-                && recipient != address(optionsToken) && recipient != address(exerciser)
-        );
+        address recipient = makeAddr("recipient");
 
         // mint options tokens
         vm.prank(tokenAdmin);
@@ -196,9 +195,9 @@ contract OptionsTokenTest is Test {
         assertApproxEqAbs(IERC20(underlyingToken).balanceOf(recipient), expectedUnderlyingAmount, 1, "Recipient got wrong amount of underlying token");
     }
 
-    function test_exerciseMinPrice(uint256 amount, address recipient) public {
+    function test_exerciseMinPrice(uint256 amount) public {
         amount = bound(amount, 1, MAX_SUPPLY);
-        vm.assume(recipient != address(0));
+        address recipient = makeAddr("recipient");
 
         // mint options tokens
         vm.prank(tokenAdmin);
@@ -297,9 +296,10 @@ contract OptionsTokenTest is Test {
     //     optionsToken.exercise(amount, recipient, address(exerciser), abi.encode(params));
     // }
 
-    function test_exercisePastDeadline(uint256 amount, address recipient, uint256 deadline) public {
+    function test_exercisePastDeadline(uint256 amount, uint256 deadline) public {
         amount = bound(amount, 0, MAX_SUPPLY);
         deadline = bound(deadline, 0, block.timestamp - 1);
+        address recipient = makeAddr("recipient");
 
         // mint options tokens
         vm.prank(tokenAdmin);
@@ -318,8 +318,9 @@ contract OptionsTokenTest is Test {
         optionsToken.exercise(amount, recipient, address(exerciser), abi.encode(params));
     }
 
-    function test_exerciseNotOToken(uint256 amount, address recipient) public {
+    function test_exerciseNotOToken(uint256 amount) public {
         amount = bound(amount, 0, MAX_SUPPLY);
+        address recipient = makeAddr("recipient");
 
         // mint options tokens
         vm.prank(tokenAdmin);
@@ -335,8 +336,9 @@ contract OptionsTokenTest is Test {
         exerciser.exercise(address(this), amount, recipient, abi.encode(params));
     }
 
-    function test_exerciseNotExerciseContract(uint256 amount, address recipient) public {
+    function test_exerciseNotExerciseContract(uint256 amount) public {
         amount = bound(amount, 1, MAX_SUPPLY);
+        address recipient = makeAddr("recipient");
 
         // mint options tokens
         vm.prank(tokenAdmin);
@@ -388,5 +390,47 @@ contract OptionsTokenTest is Test {
         vm.prank(owner);
         exerciser.unpause();
         optionsToken.exercise(amount, recipient, address(exerciser), abi.encode(params));
+    }
+
+    function test_exerciserConfigAccesses() public {
+        uint256 slippage = 555; // 5.55%
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(paymentToken);
+        tokens[1] = underlyingToken;
+        balancerTwapOracle = new MockBalancerTwapOracle(tokens);
+        oracle = IOracle(new BalancerOracle(balancerTwapOracle, underlyingToken, owner, ORACLE_SECS, ORACLE_AGO, ORACLE_MIN_PRICE));
+
+        reaperSwapper = new ReaperSwapperMock(oracle, address(underlyingToken), address(paymentToken));
+        SwapProps memory swapProps = SwapProps(address(reaperSwapper), address(reaperSwapper), ExchangeType.Bal, slippage);
+
+        vm.expectRevert(bytes("UNAUTHORIZED"));
+        exerciser.configSwapProps(swapProps);
+
+        vm.prank(owner);
+        exerciser.configSwapProps(swapProps);
+
+        vm.expectRevert(bytes("UNAUTHORIZED"));
+        exerciser.setOracle(oracle);
+
+        vm.prank(owner);
+        exerciser.setOracle(oracle);
+
+        vm.expectRevert(bytes("UNAUTHORIZED"));
+        exerciser.setMultiplier(3333);
+
+        vm.prank(owner);
+        exerciser.setMultiplier(3333);
+
+        vm.expectRevert(bytes("UNAUTHORIZED"));
+        exerciser.setInstantExitFee(1444);
+
+        vm.prank(owner);
+        exerciser.setInstantExitFee(1444);
+
+        vm.expectRevert(bytes("UNAUTHORIZED"));
+        exerciser.setMinAmountToTriggerSwap(1e16);
+
+        vm.prank(owner);
+        exerciser.setMinAmountToTriggerSwap(1e16);
     }
 }

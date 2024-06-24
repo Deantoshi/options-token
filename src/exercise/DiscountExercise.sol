@@ -35,9 +35,6 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
     error Exercise__MultiplierOutOfRange();
     error Exercise__InvalidOracle();
     error Exercise__FeeGreaterThanMax();
-    error Exercise__SlippageGreaterThanMax();
-    error Exercise__ParamHasAddressZero();
-    error Exercise__InvalidExchangeType(uint256);
     error Exercise__FeeDistributionFailed();
 
     /// Events
@@ -89,6 +86,7 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
         IOracle oracle_,
         uint256 multiplier_,
         uint256 instantExitFee_,
+        uint256 minAmountToTriggerSwap_,
         address[] memory feeRecipients_,
         uint256[] memory feeBPS_,
         SwapProps memory swapProps_
@@ -99,6 +97,7 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
         _setOracle(oracle_);
         _setMultiplier(multiplier_);
         _setInstantExitFee(instantExitFee_);
+        _setMinAmountToTriggerSwap(minAmountToTriggerSwap_);
 
         emit SetOracle(oracle_);
     }
@@ -127,6 +126,9 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
         }
     }
 
+    /// @notice Transfers not claimed tokens to the sender.
+    /// @dev When contract doesn't have funds during exercise, this function allows to claim the tokens once contract is funded
+    /// @param to Destination address for token transfer
     function claim(address to) external whenNotPaused {
         uint256 amount = credit[msg.sender];
         if (amount == 0) return;
@@ -136,6 +138,9 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
     }
 
     /// Owner functions
+    function configSwapProps(SwapProps memory _swapProps) external virtual override onlyOwner {
+        _configSwapProps(_swapProps);
+    }
 
     /// @notice Sets the oracle contract. Only callable by the owner.
     /// @param oracle_ The new oracle contract
@@ -167,6 +172,8 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
         emit SetMultiplier(multiplier_);
     }
 
+    /// @notice Sets the discount instantExitFee.
+    /// @param _instantExitFee The new instantExitFee
     function setInstantExitFee(uint256 _instantExitFee) external onlyOwner {
         _setInstantExitFee(_instantExitFee);
     }
@@ -179,7 +186,13 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
         emit SetInstantFee(_instantExitFee);
     }
 
+    /// @notice Sets the discount minAmountToTriggerSwap.
+    /// @param _minAmountToTriggerSwap The new minAmountToTriggerSwap
     function setMinAmountToTriggerSwap(uint256 _minAmountToTriggerSwap) external onlyOwner {
+        _setMinAmountToTriggerSwap(_minAmountToTriggerSwap);
+    }
+
+    function _setMinAmountToTriggerSwap(uint256 _minAmountToTriggerSwap) internal {
         minAmountToTriggerSwap = _minAmountToTriggerSwap;
         emit SetMinAmountToTrigger(_minAmountToTriggerSwap);
     }
@@ -203,13 +216,13 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
         uint256 fee = discountedUnderlying.mulDivUp(instantExitFee, BPS_DENOM);
         uint256 underlyingAmount = discountedUnderlying - fee;
 
-        // Fee amount in underlying tokens for zapping
+        // Fee amount in underlying tokens charged for zapping
         feeAmount += fee;
 
         if (feeAmount >= minAmountToTriggerSwap) {
             uint256 minAmountOut = _getMinAmountOutData(feeAmount, swapProps.maxSwapSlippage, address(oracle));
             /* Approve the underlying token to make swap */
-            underlyingToken.safeApprove(swapProps.swapper, feeAmount);
+            underlyingToken.approve(swapProps.swapper, feeAmount);
             /* Swap underlying token to payment token (asset) */
             _generalSwap(swapProps.exchangeTypes, address(underlyingToken), address(paymentToken), feeAmount, minAmountOut, swapProps.exchangeAddress);
             feeAmount = 0;
