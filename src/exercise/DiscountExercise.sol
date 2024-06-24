@@ -13,8 +13,6 @@ import {OptionsToken} from "../OptionsToken.sol";
 
 import {ExchangeType, SwapProps, SwapHelper} from "../helpers/SwapHelper.sol";
 
-import "forge-std/console.sol";
-
 struct DiscountExerciseParams {
     uint256 maxPaymentAmount;
     uint256 deadline;
@@ -201,28 +199,21 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
         returns (uint256 paymentAmount, address, uint256, uint256)
     {
         if (block.timestamp > params.deadline) revert Exercise__PastDeadline();
-        console.log("[IN] Amount: %e\tmultiplier: %e", amount, multiplier);
         uint256 discountedUnderlying = amount.mulDivUp(multiplier, BPS_DENOM);
         uint256 fee = discountedUnderlying.mulDivUp(instantExitFee, BPS_DENOM);
         uint256 underlyingAmount = discountedUnderlying - fee;
 
-        console.log("Discounted: %e \t fee: %e", discountedUnderlying, fee);
-        console.log("Fee amount before: %e", feeAmount);
-        // Fee amount in underlying tokens which is effect of not having redeem bonus
+        // Fee amount in underlying tokens for zapping
         feeAmount += fee;
-        console.log("feeAmount: %s vs minAmountToTriggerSwap: %s", feeAmount, minAmountToTriggerSwap);
 
         if (feeAmount >= minAmountToTriggerSwap) {
             uint256 minAmountOut = _getMinAmountOutData(feeAmount, swapProps.maxSwapSlippage, address(oracle));
-            console.log("minAmountOut: ", minAmountOut);
             /* Approve the underlying token to make swap */
             underlyingToken.safeApprove(swapProps.swapper, feeAmount);
             /* Swap underlying token to payment token (asset) */
-            console.log("under before: %e", underlyingToken.balanceOf(address(this)));
             _generalSwap(swapProps.exchangeTypes, address(underlyingToken), address(paymentToken), feeAmount, minAmountOut, swapProps.exchangeAddress);
             feeAmount = 0;
             // transfer payment tokens from user to the set receivers
-            console.log("Fee recipients: ", feeRecipients.length);
             distributeFees(paymentToken.balanceOf(address(this)), paymentToken);
             if (paymentToken.balanceOf(feeRecipients[0]) == 0 || paymentToken.balanceOf(feeRecipients[1]) == 0) {
                 revert Exercise__FeeDistributionFailed();
@@ -242,11 +233,9 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
         returns (uint256 paymentAmount, address, uint256, uint256)
     {
         if (block.timestamp > params.deadline) revert Exercise__PastDeadline();
-
         // apply multiplier to price
         paymentAmount = _getPaymentAmount(amount);
         if (paymentAmount > params.maxPaymentAmount) revert Exercise__SlippageTooHigh();
-
         // transfer payment tokens from user to the set receivers
         distributeFeesFrom(paymentAmount, paymentToken, from);
         // transfer underlying tokens to recipient
@@ -275,8 +264,6 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
     }
 
     function _getPaymentAmount(uint256 amount) private view returns (uint256 paymentAmount) {
-        console.log("Price inside: ", oracle.getPrice());
         paymentAmount = amount.mulWadUp(oracle.getPrice().mulDivUp(multiplier, BPS_DENOM));
-        // paymentAmount -= paymentAmount.mulDivUp(redeemBonus, BPS_DENOM); // redeem bonus applied
     }
 }

@@ -179,9 +179,9 @@ contract Common is Test {
         } else if (exchangeType == ExchangeType.VeloSolid) {
             /* Configure thena ram like dexes */
             IVeloRouter.Route[] memory veloPath = new IVeloRouter.Route[](1);
-            veloPath[0] = IVeloRouter.Route(paths[0], paths[1], false, veloFactory);
+            veloPath[0] = IVeloRouter.Route(paths[0], paths[1], false);
             reaperSwapper.updateVeloSwapPath(paths[0], paths[1], address(veloRouter), veloPath);
-            veloPath[0] = IVeloRouter.Route(paths[1], paths[0], false, veloFactory);
+            veloPath[0] = IVeloRouter.Route(paths[1], paths[0], false);
             reaperSwapper.updateVeloSwapPath(paths[1], paths[0], address(veloRouter), veloPath);
         } else if (exchangeType == ExchangeType.UniV3) {
             /* Configure univ3 like dexes */
@@ -212,7 +212,7 @@ contract Common is Test {
         } else if (exchangeType == ExchangeType.VeloSolid) {
             IVeloRouter router = IVeloRouter(payable(address(veloRouter)));
             ThenaOracle underlyingPaymentOracle;
-            address pair = router.pairFor(address(underlyingToken), address(paymentToken), false, OP_VELO_FACTORY);
+            address pair = router.poolFor(address(underlyingToken), address(paymentToken), false);
             underlyingPaymentOracle = new ThenaOracle(IThenaPair(pair), address(underlyingToken), owner, ORACLE_SECS, ORACLE_MIN_PRICE);
             oracle = IOracle(address(underlyingPaymentOracle));
         } else if (exchangeType == ExchangeType.UniV3) {
