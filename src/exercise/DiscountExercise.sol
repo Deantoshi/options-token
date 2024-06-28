@@ -35,7 +35,7 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
     error Exercise__MultiplierOutOfRange();
     error Exercise__InvalidOracle();
     error Exercise__FeeGreaterThanMax();
-    error Exercise__FeeDistributionFailed();
+    error Exercise__AmountOutIsZero();
 
     /// Events
     event Exercised(address indexed sender, address indexed recipient, uint256 amount, uint256 paymentAmount);
@@ -138,8 +138,8 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
     }
 
     /// Owner functions
-    function configSwapProps(SwapProps memory _swapProps) external virtual override onlyOwner {
-        _configSwapProps(_swapProps);
+    function setSwapProps(SwapProps memory _swapProps) external virtual override onlyOwner {
+        _setSwapProps(_swapProps);
     }
 
     /// @notice Sets the oracle contract. Only callable by the owner.
@@ -208,7 +208,6 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
     /// Internal functions
     function _zap(address from, uint256 amount, address recipient, DiscountExerciseParams memory params)
         internal
-        virtual
         returns (uint256 paymentAmount, address, uint256, uint256)
     {
         if (block.timestamp > params.deadline) revert Exercise__PastDeadline();
@@ -224,13 +223,19 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
             /* Approve the underlying token to make swap */
             underlyingToken.approve(swapProps.swapper, feeAmount);
             /* Swap underlying token to payment token (asset) */
-            _generalSwap(swapProps.exchangeTypes, address(underlyingToken), address(paymentToken), feeAmount, minAmountOut, swapProps.exchangeAddress);
+            uint256 amountOut = _generalSwap(
+                swapProps.exchangeTypes, address(underlyingToken), address(paymentToken), feeAmount, minAmountOut, swapProps.exchangeAddress
+            );
+
+            if (amountOut == 0) {
+                revert Exercise__AmountOutIsZero();
+            }
+
             feeAmount = 0;
+            underlyingToken.approve(swapProps.swapper, 0);
+
             // transfer payment tokens from user to the set receivers
             distributeFees(paymentToken.balanceOf(address(this)), paymentToken);
-            if (paymentToken.balanceOf(feeRecipients[0]) == 0 || paymentToken.balanceOf(feeRecipients[1]) == 0) {
-                revert Exercise__FeeDistributionFailed();
-            }
         }
 
         // transfer underlying tokens to recipient without the bonus
@@ -276,7 +281,7 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
         return _getPaymentAmount(amount);
     }
 
-    function _getPaymentAmount(uint256 amount) private view returns (uint256 paymentAmount) {
+    function _getPaymentAmount(uint256 amount) internal view returns (uint256 paymentAmount) {
         paymentAmount = amount.mulWadUp(oracle.getPrice().mulDivUp(multiplier, BPS_DENOM));
     }
 }

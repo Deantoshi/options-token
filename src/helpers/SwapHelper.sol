@@ -33,12 +33,16 @@ abstract contract SwapHelper {
     error SwapHelper__InvalidExchangeType(uint256 exType);
 
     constructor(SwapProps memory _swapProps) {
-        _configSwapProps(_swapProps);
+        _setSwapProps(_swapProps);
     }
 
-    function configSwapProps(SwapProps memory _swapProps) external virtual;
+    /**
+     * @dev Override function shall have proper access control
+     * @param _swapProps - swap properties
+     */
+    function setSwapProps(SwapProps memory _swapProps) external virtual;
 
-    function _configSwapProps(SwapProps memory _swapProps) internal {
+    function _setSwapProps(SwapProps memory _swapProps) internal {
         if (_swapProps.maxSwapSlippage > BPS_DENOM) {
             revert SwapHelper__SlippageGreaterThanMax();
         }
@@ -62,17 +66,18 @@ abstract contract SwapHelper {
      */
     function _generalSwap(ExchangeType exType, address tokenIn, address tokenOut, uint256 amount, uint256 minAmountOut, address exchangeAddress)
         internal
+        returns (uint256)
     {
         ISwapperSwaps _swapper = ISwapperSwaps(swapProps.swapper);
         MinAmountOutData memory minAmountOutData = MinAmountOutData(MinAmountOutKind.Absolute, minAmountOut);
         if (exType == ExchangeType.UniV2) {
-            _swapper.swapUniV2(tokenIn, tokenOut, amount, minAmountOutData, exchangeAddress);
+            return _swapper.swapUniV2(tokenIn, tokenOut, amount, minAmountOutData, exchangeAddress);
         } else if (exType == ExchangeType.Bal) {
-            _swapper.swapBal(tokenIn, tokenOut, amount, minAmountOutData, exchangeAddress);
+            return _swapper.swapBal(tokenIn, tokenOut, amount, minAmountOutData, exchangeAddress);
         } else if (exType == ExchangeType.VeloSolid) {
-            _swapper.swapVelo(tokenIn, tokenOut, amount, minAmountOutData, exchangeAddress);
+            return _swapper.swapVelo(tokenIn, tokenOut, amount, minAmountOutData, exchangeAddress);
         } else if (exType == ExchangeType.UniV3) {
-            _swapper.swapUniV3(tokenIn, tokenOut, amount, minAmountOutData, exchangeAddress);
+            return _swapper.swapUniV3(tokenIn, tokenOut, amount, minAmountOutData, exchangeAddress);
         } else {
             revert SwapHelper__InvalidExchangeType(uint256(exType));
         }

@@ -18,10 +18,10 @@ const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
 
 const config: HardhatUserConfig = {
   solidity: {
-    version: "0.8.20",
-    // settings: {
-    //   optimizer: { enabled: true, runs: 200 }
-    // }
+    version: "0.8.19",
+    settings: {
+      optimizer: { enabled: true, runs: 9999 }
+    }
   },
   sourcify: {
     enabled: true
@@ -47,21 +47,21 @@ const config: HardhatUserConfig = {
       accounts: [`0x${PRIVATE_KEY}`],
     },
   },
-  // etherscan: {
-  //   apiKey: { 
-  //     bsc: process.env.ETHERSCAN_KEY || "",
-  //   },
-  //   customChains: [
-  //     {
-  //       network: "mode",
-  //       chainId: 34443,
-  //       urls: {
-  //         apiURL: "https://explorer.mode.network",
-  //         browserURL: "https://explorer.mode.network"
-  //       }
-  //     }
-  //   ]
-  // },
+  etherscan: {
+    apiKey: { 
+      bsc: process.env.ETHERSCAN_KEY || "",
+    },
+    // customChains: [
+    //   {
+    //     network: "mode",
+    //     chainId: 34443,
+    //     urls: {
+    //       apiURL: "https://explorer.mode.network",
+    //       browserURL: "https://explorer.mode.network"
+    //     }
+    //   }
+    // ]
+  },
 
 };
 

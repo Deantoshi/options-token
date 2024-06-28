@@ -66,7 +66,6 @@ contract OptionsTokenTest is Test {
         optionsToken.transferOwnership(owner);
 
         /* Reaper deployment and configuration */
-
         uint256 slippage = 500; // 5%
         uint256 minAmountToTriggerSwap = 1e5;
 
@@ -392,6 +391,39 @@ contract OptionsTokenTest is Test {
         optionsToken.exercise(amount, recipient, address(exerciser), abi.encode(params));
     }
 
+    function test_oTokenWhenPaused(uint256 amount) public {
+        amount = bound(amount, 100, 1 ether);
+        address recipient = makeAddr("recipient");
+
+        // mint options tokens
+        vm.prank(tokenAdmin);
+        optionsToken.mint(address(this), 3 * amount);
+
+        // mint payment tokens
+        uint256 expectedPaymentAmount = 3 * amount.mulWadUp(oracle.getPrice().mulDivUp(PRICE_MULTIPLIER, ORACLE_MIN_PRICE_DENOM));
+        deal(address(paymentToken), address(this), expectedPaymentAmount);
+
+        // exercise options tokens
+        DiscountExerciseParams memory params =
+            DiscountExerciseParams({maxPaymentAmount: expectedPaymentAmount, deadline: type(uint256).max, isInstantExit: false});
+        optionsToken.exercise(amount, recipient, address(exerciser), abi.encode(params));
+
+        /* Only owner can pause */
+        vm.startPrank(recipient);
+        vm.expectRevert(bytes("Ownable: caller is not the owner")); // Ownable: caller is not the owner
+        optionsToken.pause();
+        vm.stopPrank();
+
+        vm.prank(owner);
+        optionsToken.pause();
+        vm.expectRevert(bytes("Pausable: paused"));
+        optionsToken.exercise(amount, recipient, address(exerciser), abi.encode(params));
+
+        vm.prank(owner);
+        optionsToken.unpause();
+        optionsToken.exercise(amount, recipient, address(exerciser), abi.encode(params));
+    }
+
     function test_exerciserConfigAccesses() public {
         uint256 slippage = 555; // 5.55%
         address[] memory tokens = new address[](2);
@@ -404,10 +436,10 @@ contract OptionsTokenTest is Test {
         SwapProps memory swapProps = SwapProps(address(reaperSwapper), address(reaperSwapper), ExchangeType.Bal, slippage);
 
         vm.expectRevert(bytes("UNAUTHORIZED"));
-        exerciser.configSwapProps(swapProps);
+        exerciser.setSwapProps(swapProps);
 
         vm.prank(owner);
-        exerciser.configSwapProps(swapProps);
+        exerciser.setSwapProps(swapProps);
 
         vm.expectRevert(bytes("UNAUTHORIZED"));
         exerciser.setOracle(oracle);
