@@ -32,9 +32,7 @@ abstract contract SwapHelper {
     error SwapHelper__ParamHasAddressZero();
     error SwapHelper__InvalidExchangeType(uint256 exType);
 
-    constructor(SwapProps memory _swapProps) {
-        _setSwapProps(_swapProps);
-    }
+    constructor() {}
 
     /**
      * @dev Override function shall have proper access control

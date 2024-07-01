@@ -90,10 +90,11 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
         address[] memory feeRecipients_,
         uint256[] memory feeBPS_,
         SwapProps memory swapProps_
-    ) BaseExercise(oToken_, feeRecipients_, feeBPS_) Owned(owner_) SwapHelper(swapProps_) {
+    ) BaseExercise(oToken_, feeRecipients_, feeBPS_) Owned(owner_) SwapHelper() {
         paymentToken = paymentToken_;
         underlyingToken = underlyingToken_;
 
+        _setSwapProps(swapProps_);
         _setOracle(oracle_);
         _setMultiplier(multiplier_);
         _setInstantExitFee(instantExitFee_);
