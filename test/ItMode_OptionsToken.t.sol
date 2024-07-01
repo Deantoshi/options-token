@@ -24,7 +24,6 @@ contract ModeOptionsTokenTest is Test, Common {
     uint256 constant FORK_BLOCK = 9260950;
     string MAINNET_URL = vm.envString("MODE_RPC_URL");
     uint256 constant ORACLE_INIT_TWAP_VALUE = 1e19;
-    uint128 constant ORACLE_MIN_PRICE_DENOM = 10000;
 
     address[] feeRecipients_;
     uint256[] feeBPS_;
@@ -89,7 +88,7 @@ contract ModeOptionsTokenTest is Test, Common {
 
         balancerTwapOracle = new MockBalancerTwapOracle(tokens);
         console.log(tokens[0], tokens[1]);
-        oracle = new ThenaOracle(IThenaPair(MODE_VELO_WETH_MODE_PAIR), address(underlyingToken), owner, ORACLE_SECS, ORACLE_MIN_PRICE_DENOM);
+        oracle = new ThenaOracle(IThenaPair(MODE_VELO_WETH_MODE_PAIR), address(underlyingToken), owner, ORACLE_SECS, uint128(ORACLE_MIN_PRICE_DENOM));
         exerciser = new DiscountExercise(
             optionsToken,
             owner,
