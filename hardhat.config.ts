@@ -11,6 +11,7 @@ import { config as dotenvConfig } from "dotenv";
 
 // import "@nomiclabs/hardhat-ethers";
 import "@nomicfoundation/hardhat-verify";
+import "hardhat-contract-sizer";
 
 dotenvConfig();
 
@@ -20,7 +21,7 @@ const config: HardhatUserConfig = {
   solidity: {
     version: "0.8.19",
     settings: {
-      optimizer: { enabled: true, runs: 9999 }
+      optimizer: { enabled: true, runs: 200 }
     }
   },
   sourcify: {

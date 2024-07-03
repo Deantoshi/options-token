@@ -27,17 +27,6 @@ contract ItModeOptionsCompounder is Common {
     // ReaperStrategyGranary strategy;
     IOracle oracle;
 
-    // string public vaultName = "?_? Vault";
-    // string public vaultSymbol = "rf-?_?";
-    // uint256 public vaultTvlCap = type(uint256).max;
-    // address public treasuryAddress = 0xC17DfA7Eb4300871D5f022c107E07F98c750472e;
-
-    // address public optionsTokenAddress =
-    //     0x45c19a3068642B98F5AEf1dEdE023443cd1FbFAd;
-    // address public discountExerciseAddress =
-    //     0x3Fbf4f9cf73162e4e156972540f53Dabe65c2862;
-    // address public bscTokenAdmin = 0x6eB1fF8E939aFBF3086329B2b32725b72095512C;
-
     function setUp() public {
         /* Common assignments */
         ExchangeType exchangeType = ExchangeType.VeloSolid;
@@ -161,7 +150,6 @@ contract ItModeOptionsCompounder is Common {
 
         // vm.startPrank(address(strategy));
         /* already approved in fixture_prepareOptionToken */
-        // uint256 _balance = optionsTokenProxy.balanceOf(address(optionsCompounder));
         optionsCompounder.harvestOTokens(amount, address(exerciser), minAmount);
         // vm.stopPrank();
 
