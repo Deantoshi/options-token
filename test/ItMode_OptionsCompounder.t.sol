@@ -34,12 +34,6 @@ contract ItModeOptionsCompounder is Common {
         paymentToken = IERC20(MODE_MODE);
         underlyingToken = IERC20(MODE_WETH);
         addressProvider = MODE_ADDRESS_PROVIDER;
-        // wantToken = IERC20(OP_OP);
-        // paymentUnderlyingBpt = OP_OATHV2_ETH_BPT;
-        // paymentWantBpt = OP_WETH_OP_USDC_BPT;
-        // balancerVault = OP_BEETX_VAULT;
-        // swapRouter = ISwapRouter(OP_BEETX_VAULT);
-        // univ3Factory = IUniswapV3Factory(OP_UNIV3_FACTORY);
         veloRouter = IVeloRouter(MODE_VELO_ROUTER);
         veloFactory = MODE_VELO_FACTORY;
 
@@ -54,13 +48,7 @@ contract ItModeOptionsCompounder is Common {
 
         /* Setup roles */
         address[] memory strategists = new address[](1);
-        // address[] memory multisigRoles = new address[](3);
-        // address[] memory keepers = new address[](1);
         strategists[0] = strategist;
-        // multisigRoles[0] = management1;
-        // multisigRoles[1] = management2;
-        // multisigRoles[2] = management3;
-        // keepers[0] = keeper;
 
         /* Variables */
 
@@ -108,13 +96,9 @@ contract ItModeOptionsCompounder is Common {
         optionsTokenProxy.setExerciseContract(address(exerciser), true);
 
         /* Strategy deployment */
-        // strategy = new ReaperStrategyGranary();
-        // tmpProxy = new ERC1967Proxy(address(strategy), "");
-        // strategy = ReaperStrategyGranary(address(tmpProxy));
         optionsCompounder = new OptionsCompounder();
         tmpProxy = new ERC1967Proxy(address(optionsCompounder), "");
         optionsCompounder = OptionsCompounder(address(tmpProxy));
-        // MockedLendingPool addressProviderAndLendingPoolMock = new MockedLendingPool(address(optionsCompounder));
         console.log("Initializing...");
         optionsCompounder.initialize(address(optionsTokenProxy), address(addressProvider), address(reaperSwapper), swapProps, oracle);
 
@@ -168,12 +152,10 @@ contract ItModeOptionsCompounder is Common {
         SwapProps memory swapProps = SwapProps(address(reaperSwapper), address(swapRouter), ExchangeType.UniV3, 200);
         /* Hacker tries to perform harvest */
         vm.startPrank(hacker);
-        // vm.expectRevert(bytes4(keccak256("OptionsCompounder__OnlyStratAllowed()")));
-        // optionsCompounder.harvestOTokens(amount, address(exerciser), NON_ZERO_PROFIT);
 
         /* Hacker tries to manipulate contract configuration */
         vm.expectRevert("Ownable: caller is not the owner");
-        optionsCompounder.setOptionToken(randomOption);
+        optionsCompounder.setOptionsToken(randomOption);
 
         vm.expectRevert("Ownable: caller is not the owner");
         optionsCompounder.setSwapProps(swapProps);
@@ -187,7 +169,7 @@ contract ItModeOptionsCompounder is Common {
 
         /* Admin tries to set different option token */
         vm.startPrank(owner);
-        optionsCompounder.setOptionToken(randomOption);
+        optionsCompounder.setOptionsToken(randomOption);
         vm.stopPrank();
         assertEq(address(optionsCompounder.getOptionTokenAddress()), randomOption);
     }
@@ -207,7 +189,6 @@ contract ItModeOptionsCompounder is Common {
         exerciser.setMultiplier(9999);
         vm.stopPrank();
         /* Increase TWAP price to make flashloan not profitable */
-        // underlyingPaymentMock.setTwapValue(initTwap + ((initTwap * 10) / 100));
 
         /* Notice: additional protection is in exerciser: Exercise__SlippageTooHigh */
         vm.expectRevert(bytes4(keccak256("OptionsCompounder__FlashloanNotProfitableEnough()")));
@@ -239,9 +220,7 @@ contract ItModeOptionsCompounder is Common {
         /* Notice: additional protection is in exerciser: Exercise__SlippageTooHigh */
         vm.expectRevert(bytes4(keccak256("OptionsCompounder__FlashloanNotProfitableEnough()")));
         /* Already approved in fixture_prepareOptionToken */
-        // vm.startPrank(strategy);
         optionsCompounder.harvestOTokens(amount, address(exerciser), minAmountOfPayment);
-        // vm.stopPrank();
     }
 
     function test_callExecuteOperationWithoutFlashloanTrigger(uint256 amount, address executor) public {

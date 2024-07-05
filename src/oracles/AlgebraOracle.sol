@@ -5,7 +5,7 @@ import {Owned} from "solmate/auth/Owned.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 
 import {IOracle} from "../interfaces/IOracle.sol";
-
+import {ERC20} from "solmate/tokens/ERC20.sol";
 import {IAlgebraPool} from "../interfaces/IAlgebraPool.sol";
 import {TickMath} from "v3-core/libraries/TickMath.sol";
 import {FullMath} from "v3-core/libraries/FullMath.sol";
@@ -70,6 +70,7 @@ contract AlgebraOracle is IOracle, Owned {
     /// -----------------------------------------------------------------------
 
     constructor(IAlgebraPool algebraPool_, address token, address owner_, uint32 secs_, uint32 ago_, uint128 minPrice_) Owned(owner_) {
+        if (ERC20(algebraPool_.token0()).decimals() != 18 || ERC20(algebraPool_.token1()).decimals() != 18) revert AlgebraOracle__InvalidParams();
         if (algebraPool_.token0() != token && algebraPool_.token1() != token) revert AlgebraOracle__InvalidParams();
         if (secs_ < MIN_SECS) revert AlgebraOracle__InvalidWindow();
         algebraPool = algebraPool_;

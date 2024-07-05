@@ -17,6 +17,7 @@ error OptionsCompounder__SlippageGreaterThanMax();
 error OptionsCompounder__ParamHasAddressZero();
 error OptionsCompounder__NotEnoughUnderlyingTokens();
 error OptionsCompounder__WrongMinPaymentAmount();
+error OptionsCompounder__AmountOutIsZero();
 
 interface IOptionsCompounder {
     function harvestOTokens(uint256 amount, address exerciseContract, uint256 minWantAmount) external;

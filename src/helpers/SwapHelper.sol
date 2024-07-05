@@ -91,7 +91,7 @@ abstract contract SwapHelper {
         /* Get price from oracle */
         uint256 price = IOracle(_oracle).getPrice();
         /* Deduct slippage amount from predicted amount */
-        minAmountOut = ((_amountIn.mulWadUp(price)) - (((_amountIn.mulWadUp(price)) * _maxSlippage) / BPS_DENOM));
+        minAmountOut = (_amountIn.mulWadUp(price) * (BPS_DENOM - _maxSlippage)) / BPS_DENOM;
 
         return minAmountOut;
     }

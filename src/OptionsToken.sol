@@ -61,6 +61,7 @@ contract OptionsToken is IOptionsToken, ERC20Upgradeable, OwnableUpgradeable, UU
         __UUPSUpgradeable_init();
         __ERC20_init(name_, symbol_);
         __Ownable_init();
+        __Pausable_init();
         tokenAdmin = tokenAdmin_;
 
         _clearUpgradeCooldown();
@@ -96,6 +97,10 @@ contract OptionsToken is IOptionsToken, ERC20Upgradeable, OwnableUpgradeable, UU
     /// @param recipient The recipient of the reward
     /// @param option The address of the Exercise contract with the redemption logic
     /// @param params Extra parameters to be used by the exercise function
+    /// @return paymentAmount token amount paid for exercising
+    /// @return data0 address data to return by different exerciser contracts
+    /// @return data1 integer data to return by different exerciser contracts
+    /// @return data2 additional integer data to return by different exerciser contracts
     function exercise(uint256 amount, address recipient, address option, bytes calldata params)
         external
         virtual

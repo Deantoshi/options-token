@@ -47,9 +47,11 @@ contract UniswapOracleTest is Test {
     Params _default;
 
     function setUp() public {
+        opFork = vm.createSelectFork(OPTIMISM_RPC_URL, FORK_BLOCK);
         mockV3Pool = new MockUniswapPool();
         mockV3Pool.setCumulatives(sampleCumulatives);
         mockV3Pool.setToken0(OP_ADDRESS);
+        mockV3Pool.setToken1(WETH_ADDRESS);
 
         _default = Params(IUniswapV3Pool(WETH_OP_POOL_ADDRESS), OP_ADDRESS, address(this), 30 minutes, 0, 1000);
         swapRouter = ISwapRouter(SWAP_ROUTER_ADDRESS);
@@ -59,33 +61,15 @@ contract UniswapOracleTest is Test {
     /// Mock tests
     /// ----------------------------------------------------------------------
 
-    function test_PriceToken0() public {
-        UniswapV3Oracle oracle = new UniswapV3Oracle(
-            mockV3Pool,
-            OP_ADDRESS,
-            _default.owner,
-            _default.secs,
-            _default.ago,
-            _default.minPrice
-        );
+    function test_PriceTokens() public {
+        UniswapV3Oracle oracle0 = new UniswapV3Oracle(mockV3Pool, OP_ADDRESS, _default.owner, _default.secs, _default.ago, _default.minPrice);
+        UniswapV3Oracle oracle1 = new UniswapV3Oracle(mockV3Pool, WETH_ADDRESS, _default.owner, _default.secs, _default.ago, _default.minPrice);
 
-        uint256 price = oracle.getPrice();
-        assertEq(price, expectedPriceToken0);
-    }
-
-    function test_PriceToken1() public {
-        UniswapV3Oracle oracle = new UniswapV3Oracle(
-            mockV3Pool,
-            address(0),
-            _default.owner,
-            _default.secs,
-            _default.ago,
-            _default.minPrice
-        );
-
-        uint256 price = oracle.getPrice();
-        uint256 expectedPriceToken1 = price = FixedPointMathLib.divWadUp(1e18, price);
-        assertEq(price, expectedPriceToken1);
+        uint256 price0 = oracle0.getPrice();
+        uint256 price1 = oracle1.getPrice();
+        assertEq(price0, expectedPriceToken0);
+        uint256 expectedPriceToken1 = FixedPointMathLib.divWadDown(1e18, price0);
+        assertEq(price1, expectedPriceToken1); //precision
     }
 
     /// ----------------------------------------------------------------------
@@ -93,16 +77,7 @@ contract UniswapOracleTest is Test {
     /// ----------------------------------------------------------------------
 
     function test_priceWithinAcceptableRange() public {
-        opFork = vm.createSelectFork(OPTIMISM_RPC_URL, FORK_BLOCK);
-
-        UniswapV3Oracle oracle = new UniswapV3Oracle(
-            _default.pool,
-            _default.token,
-            _default.owner,
-            _default.secs,
-            _default.ago,
-            _default.minPrice
-        );
+        UniswapV3Oracle oracle = new UniswapV3Oracle(_default.pool, _default.token, _default.owner, _default.secs, _default.ago, _default.minPrice);
 
         uint256 oraclePrice = oracle.getPrice();
 
@@ -112,16 +87,7 @@ contract UniswapOracleTest is Test {
     }
 
     function test_revertMinPrice() public {
-        opFork = vm.createSelectFork(OPTIMISM_RPC_URL, FORK_BLOCK);
-
-        UniswapV3Oracle oracle = new UniswapV3Oracle(
-            _default.pool,
-            _default.token,
-            _default.owner,
-            _default.secs,
-            _default.ago,
-            _default.minPrice
-        );
+        UniswapV3Oracle oracle = new UniswapV3Oracle(_default.pool, _default.token, _default.owner, _default.secs, _default.ago, _default.minPrice);
 
         skip(_default.secs);
 
@@ -143,14 +109,8 @@ contract UniswapOracleTest is Test {
         swapRouter.exactInputSingle(paramsIn);
 
         // deploy a new oracle with a minPrice that is too high
-        UniswapV3Oracle oracleMinPrice = new UniswapV3Oracle(
-            _default.pool,
-            _default.token,
-            _default.owner,
-            _default.secs,
-            _default.ago,
-            uint128(price)
-        );
+        UniswapV3Oracle oracleMinPrice =
+            new UniswapV3Oracle(_default.pool, _default.token, _default.owner, _default.secs, _default.ago, uint128(price));
 
         skip(_default.secs);
 
@@ -159,16 +119,7 @@ contract UniswapOracleTest is Test {
     }
 
     function test_singleBlockManipulation() public {
-        opFork = vm.createSelectFork(OPTIMISM_RPC_URL, FORK_BLOCK);
-
-        UniswapV3Oracle oracle = new UniswapV3Oracle(
-            _default.pool,
-            _default.token,
-            _default.owner,
-            _default.secs,
-            _default.ago,
-            _default.minPrice
-        );
+        UniswapV3Oracle oracle = new UniswapV3Oracle(_default.pool, _default.token, _default.owner, _default.secs, _default.ago, _default.minPrice);
 
         address manipulator = makeAddr("manipulator");
         deal(OP_ADDRESS, manipulator, 1000000 ether);
@@ -200,16 +151,8 @@ contract UniswapOracleTest is Test {
 
     function test_priceManipulation(uint256 skipTime) public {
         skipTime = bound(skipTime, 1, _default.secs);
-        opFork = vm.createSelectFork(OPTIMISM_RPC_URL, FORK_BLOCK);
 
-        UniswapV3Oracle oracle = new UniswapV3Oracle(
-            _default.pool,
-            _default.token,
-            _default.owner,
-            _default.secs,
-            _default.ago,
-            _default.minPrice
-        );
+        UniswapV3Oracle oracle = new UniswapV3Oracle(_default.pool, _default.token, _default.owner, _default.secs, _default.ago, _default.minPrice);
 
         address manipulator = makeAddr("manipulator");
         deal(OP_ADDRESS, manipulator, 1000000 ether);

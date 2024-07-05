@@ -7,16 +7,15 @@ import {IFlashLoanReceiver} from "./interfaces/IFlashLoanReceiver.sol";
 import {ILendingPoolAddressesProvider} from "./interfaces/ILendingPoolAddressesProvider.sol";
 import {ILendingPool} from "./interfaces/ILendingPool.sol";
 import {IOracle} from "./interfaces/IOracle.sol";
-import "./interfaces/IOptionsCompounder.sol";
 import {DiscountExerciseParams, DiscountExercise} from "./exercise/DiscountExercise.sol";
 import {ReaperAccessControl} from "vault-v2/mixins/ReaperAccessControl.sol";
-// import {ISwapperSwaps, MinAmountOutData, MinAmountOutKind} from "vault-v2/ReaperSwapper.sol";
 import {IERC20} from "oz/token/ERC20/IERC20.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {OwnableUpgradeable} from "oz-upgradeable/access/OwnableUpgradeable.sol";
 import {UUPSUpgradeable} from "oz-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {SafeERC20} from "oz/token/ERC20/utils/SafeERC20.sol";
 import {ExchangeType, SwapProps, SwapHelper} from "./helpers/SwapHelper.sol";
+import "./interfaces/IOptionsCompounder.sol";
 
 /**
  * @title Consumes options tokens, exercise them with flashloaned asset and converts gain to strategy want token
@@ -37,8 +36,7 @@ contract OptionsCompounder is IFlashLoanReceiver, OwnableUpgradeable, UUPSUpgrad
     }
 
     /* Constants */
-    uint8 constant MIN_NR_OF_FLASHLOAN_ASSETS = 1;
-    uint256 constant PERCENTAGE = 10000;
+    uint8 constant MAX_NR_OF_FLASHLOAN_ASSETS = 1;
 
     uint256 public constant UPGRADE_TIMELOCK = 48 hours;
     uint256 public constant FUTURE_NEXT_PROPOSAL_TIME = 365 days * 100;
@@ -78,12 +76,12 @@ contract OptionsCompounder is IFlashLoanReceiver, OwnableUpgradeable, UUPSUpgrad
         initializer
     {
         __Ownable_init();
-        setOptionToken(_optionsToken);
+        _setOptionsToken(_optionsToken);
         _setSwapProps(_swapProps);
-        setOracle(_oracle);
-        setSwapper(_swapper);
+        _setOracle(_oracle);
+        _setSwapper(_swapper);
         flashloanFinished = true;
-        setAddressProvider(_addressProvider);
+        _setAddressProvider(_addressProvider);
         __UUPSUpgradeable_init();
         _clearUpgradeCooldown();
     }
@@ -94,34 +92,50 @@ contract OptionsCompounder is IFlashLoanReceiver, OwnableUpgradeable, UUPSUpgrad
     /**
      * @notice Sets option token address
      * @dev Can be executed only by admins
-     * @param _optionToken - address of option token contract
+     * @param _optionsToken - address of option token contract
      */
-    function setOptionToken(address _optionToken) public onlyOwner {
-        if (_optionToken == address(0)) {
+    function setOptionsToken(address _optionsToken) external onlyOwner {
+        _setOptionsToken(_optionsToken);
+    }
+
+    function _setOptionsToken(address _optionsToken) internal {
+        if (_optionsToken == address(0)) {
             revert OptionsCompounder__ParamHasAddressZero();
         }
-        optionsToken = IOptionsToken(_optionToken);
+        optionsToken = IOptionsToken(_optionsToken);
     }
 
     function setSwapProps(SwapProps memory _swapProps) external override onlyOwner {
         _setSwapProps(_swapProps);
     }
 
-    function setOracle(IOracle _oracle) public onlyOwner {
+    function setOracle(IOracle _oracle) external onlyOwner {
+        _setOracle(_oracle);
+    }
+
+    function _setOracle(IOracle _oracle) internal {
         if (address(_oracle) == address(0)) {
             revert OptionsCompounder__ParamHasAddressZero();
         }
         oracle = _oracle;
     }
 
-    function setSwapper(address _swapper) public onlyOwner {
+    function setSwapper(address _swapper) external onlyOwner {
+        _setSwapper(_swapper);
+    }
+
+    function _setSwapper(address _swapper) internal {
         if (_swapper == address(0)) {
             revert OptionsCompounder__ParamHasAddressZero();
         }
         swapper = _swapper;
     }
 
-    function setAddressProvider(address _addressProvider) public onlyOwner {
+    function setAddressProvider(address _addressProvider) external onlyOwner {
+        _setAddressProvider(_addressProvider);
+    }
+
+    function _setAddressProvider(address _addressProvider) internal {
         if (_addressProvider == address(0)) {
             revert OptionsCompounder__ParamHasAddressZero();
         }
@@ -195,21 +209,22 @@ contract OptionsCompounder is IFlashLoanReceiver, OwnableUpgradeable, UUPSUpgrad
      *  @param amounts - list of amounts flash loaned (only one amount allowed in this case)
      *  @param premiums - list of premiums for flash loaned assets (only one premium allowed in this case)
      *  @param params - encoded data about options amount, exercise contract address, initial balance and minimal want amount
+     *  @return bool - value that returns whether flashloan operation went well
      */
     function executeOperation(address[] calldata assets, uint256[] calldata amounts, uint256[] calldata premiums, address, bytes calldata params)
         external
         override
         returns (bool)
     {
-        if (flashloanFinished != false) {
+        if (flashloanFinished != false || msg.sender != address(lendingPool)) {
             revert OptionsCompounder__FlashloanNotTriggered();
         }
-        if (assets.length > MIN_NR_OF_FLASHLOAN_ASSETS || amounts.length > MIN_NR_OF_FLASHLOAN_ASSETS || premiums.length > MIN_NR_OF_FLASHLOAN_ASSETS)
+        if (assets.length > MAX_NR_OF_FLASHLOAN_ASSETS || amounts.length > MAX_NR_OF_FLASHLOAN_ASSETS || premiums.length > MAX_NR_OF_FLASHLOAN_ASSETS)
         {
             revert OptionsCompounder__TooMuchAssetsLoaned();
         }
         /* Later the gain can be local variable */
-        exerciseOptionAndReturnDebt(assets[0], amounts[0], premiums[0], params);
+        _exerciseOptionAndReturnDebt(assets[0], amounts[0], premiums[0], params);
         flashloanFinished = true;
         return true;
     }
@@ -223,10 +238,10 @@ contract OptionsCompounder is IFlashLoanReceiver, OwnableUpgradeable, UUPSUpgrad
      *  @param premium - list of premiums for flash loaned assets (only one premium allowed in this case)
      *  @param params - encoded data about options amount, exercise contract address, initial balance and minimal want amount
      */
-    function exerciseOptionAndReturnDebt(address asset, uint256 amount, uint256 premium, bytes calldata params) private {
+    function _exerciseOptionAndReturnDebt(address asset, uint256 amount, uint256 premium, bytes calldata params) private {
         FlashloanParams memory flashloanParams = abi.decode(params, (FlashloanParams));
         uint256 assetBalance = 0;
-        uint256 minAmountOut;
+        uint256 minAmountOut = 0;
 
         /* Get underlying and payment tokens to make sure there is no change between 
         harvest and excersice */
@@ -242,18 +257,22 @@ contract OptionsCompounder is IFlashLoanReceiver, OwnableUpgradeable, UUPSUpgrad
         {
             IERC20(address(optionsToken)).safeTransferFrom(flashloanParams.sender, address(this), flashloanParams.optionsAmount);
             bytes memory exerciseParams =
-                abi.encode(DiscountExerciseParams({maxPaymentAmount: amount, deadline: type(uint256).max, isInstantExit: false}));
+                abi.encode(DiscountExerciseParams({maxPaymentAmount: amount, deadline: block.timestamp, isInstantExit: false}));
             if (underlyingToken.balanceOf(flashloanParams.exerciserContract) < flashloanParams.optionsAmount) {
                 revert OptionsCompounder__NotEnoughUnderlyingTokens();
             }
-            /* Approve spending option token */
+            /* Approve spending payment token */
             IERC20(asset).approve(flashloanParams.exerciserContract, amount);
             /* Exercise in order to get underlying token */
             optionsToken.exercise(flashloanParams.optionsAmount, address(this), flashloanParams.exerciserContract, exerciseParams);
+
+            /* Approve spending payment token to 0 for safety */
+            IERC20(asset).approve(flashloanParams.exerciserContract, 0);
         }
 
         {
             uint256 balanceOfUnderlyingToken = 0;
+            uint256 swapAmountOut = 0;
             balanceOfUnderlyingToken = underlyingToken.balanceOf(address(this));
             minAmountOut = _getMinAmountOutData(balanceOfUnderlyingToken, swapProps.maxSwapSlippage, address(oracle));
 
@@ -261,7 +280,16 @@ contract OptionsCompounder is IFlashLoanReceiver, OwnableUpgradeable, UUPSUpgrad
             underlyingToken.approve(swapper, balanceOfUnderlyingToken);
 
             /* Swap underlying token to payment token (asset) */
-            _generalSwap(swapProps.exchangeTypes, address(underlyingToken), asset, balanceOfUnderlyingToken, minAmountOut, swapProps.exchangeAddress);
+            swapAmountOut = _generalSwap(
+                swapProps.exchangeTypes, address(underlyingToken), asset, balanceOfUnderlyingToken, minAmountOut, swapProps.exchangeAddress
+            );
+
+            if (swapAmountOut == 0) {
+                revert OptionsCompounder__AmountOutIsZero();
+            }
+
+            /* Approve the underlying token to 0 for safety */
+            underlyingToken.approve(swapper, 0);
         }
 
         /* Calculate profit and revert if it is not profitable */
@@ -274,14 +302,14 @@ contract OptionsCompounder is IFlashLoanReceiver, OwnableUpgradeable, UUPSUpgrad
             if (
                 (
                     (assetBalance < flashloanParams.initialBalance)
-                        || (assetBalance - flashloanParams.initialBalance) <= (totalAmountToPay + flashloanParams.minPaymentAmount)
+                        || (assetBalance - flashloanParams.initialBalance) < (totalAmountToPay + flashloanParams.minPaymentAmount)
                 )
             ) {
                 revert OptionsCompounder__FlashloanNotProfitableEnough();
             }
 
             /* Protected against underflows by statement above */
-            gainInPaymentToken = assetBalance - totalAmountToPay;
+            gainInPaymentToken = assetBalance - totalAmountToPay - flashloanParams.initialBalance;
 
             /* Approve lending pool to spend borrowed tokens + premium */
             IERC20(asset).approve(address(lendingPool), totalAmountToPay);
