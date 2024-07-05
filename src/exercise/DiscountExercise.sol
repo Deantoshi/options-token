@@ -36,6 +36,7 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
     error Exercise__InvalidOracle();
     error Exercise__FeeGreaterThanMax();
     error Exercise__AmountOutIsZero();
+    error Exercise__ZapMultiplierIncompatible();
 
     /// Events
     event Exercised(address indexed sender, address indexed recipient, uint256 amount, uint256 paymentAmount);
@@ -212,14 +213,16 @@ contract DiscountExercise is BaseExercise, SwapHelper, Pausable {
         returns (uint256 paymentAmount, address, uint256, uint256)
     {
         if (block.timestamp > params.deadline) revert Exercise__PastDeadline();
-        uint256 discountedUnderlying = amount.mulDivUp(multiplier, BPS_DENOM);
+        if (multiplier >= BPS_DENOM) revert Exercise__ZapMultiplierIncompatible();
+        uint256 discountedUnderlying = amount.mulDivUp(BPS_DENOM - multiplier, BPS_DENOM);
         uint256 fee = discountedUnderlying.mulDivUp(instantExitFee, BPS_DENOM);
         uint256 underlyingAmount = discountedUnderlying - fee;
+        uint256 balance = underlyingToken.balanceOf(address(this));
 
         // Fee amount in underlying tokens charged for zapping
         feeAmount += fee;
 
-        if (feeAmount >= minAmountToTriggerSwap) {
+        if (feeAmount >= minAmountToTriggerSwap && balance >= (feeAmount + underlyingAmount)) {
             uint256 minAmountOut = _getMinAmountOutData(feeAmount, swapProps.maxSwapSlippage, address(oracle));
             /* Approve the underlying token to make swap */
             underlyingToken.approve(swapProps.swapper, feeAmount);

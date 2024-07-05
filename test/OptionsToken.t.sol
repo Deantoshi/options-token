@@ -28,6 +28,7 @@ contract OptionsTokenTest is Test {
     uint256 constant ORACLE_MIN_PRICE_DENOM = 10000;
     uint256 constant MAX_SUPPLY = 1e27; // the max supply of the options token & the underlying token
     uint256 constant INSTANT_EXIT_FEE = 500;
+    uint256 constant BPS_DENOM = 10_000;
 
     address owner;
     address tokenAdmin;
@@ -125,7 +126,7 @@ contract OptionsTokenTest is Test {
         assertEqDecimal(optionsToken.balanceOf(address(this)), amount, 18);
     }
 
-    function test_discountExerciseHappyPath(uint256 amount) public {
+    function test_redeemPositiveScenario(uint256 amount) public {
         amount = bound(amount, 100, MAX_SUPPLY);
         address recipient = makeAddr("recipient");
 
@@ -155,7 +156,7 @@ contract OptionsTokenTest is Test {
         assertEqDecimal(expectedPaymentAmount, paymentAmount, 18, "exercise returned wrong value");
     }
 
-    function test_instantExitExerciseHappyPath(uint256 amount) public {
+    function test_zapPositiveScenario(uint256 amount) public {
         amount = bound(amount, 1e16, 1e22);
         address recipient = makeAddr("recipient");
 
@@ -464,5 +465,107 @@ contract OptionsTokenTest is Test {
 
         vm.prank(owner);
         exerciser.setMinAmountToTriggerSwap(1e16);
+    }
+
+    function test_zapWhenExerciseUnderfunded(uint256 amount) public {
+        amount = bound(amount, 1e16, 1e22);
+        address recipient = makeAddr("recipient");
+
+        uint256 remainingAmount = 4e15;
+
+        // mint options tokens
+        vm.prank(tokenAdmin);
+        optionsToken.mint(address(this), amount);
+
+        // mint payment tokens
+        uint256 expectedPaymentAmount = amount.mulWadUp(ORACLE_INIT_TWAP_VALUE.mulDivUp(PRICE_MULTIPLIER, ORACLE_MIN_PRICE_DENOM));
+        uint256 discountedUnderlying = amount.mulDivUp(PRICE_MULTIPLIER, 10_000);
+        uint256 expectedUnderlyingAmount = discountedUnderlying - discountedUnderlying.mulDivUp(INSTANT_EXIT_FEE, 10_000);
+        deal(address(paymentToken), address(this), expectedPaymentAmount);
+        console.log("discountedUnderlying:", discountedUnderlying);
+        console.log("expectedUnderlyingAmount:", expectedUnderlyingAmount);
+        uint256 calcPaymentAmount = exerciser.getPaymentAmount(amount);
+        uint256 totalFee = calcPaymentAmount.mulDivUp(INSTANT_EXIT_FEE, 10_000);
+        uint256 fee1 = totalFee.mulDivDown(feeBPS_[0], 10_000);
+        uint256 fee2 = totalFee - fee1;
+        console.log("expected paymentFee1: ", fee1);
+        console.log("expected paymentFee2: ", fee2);
+
+        // Simulate sitiation when exerciser has less underlying amount than expected from exercise action
+        vm.prank(address(exerciser));
+        // IERC20(underlyingToken).transfer(address(this), 1e27 - (discountedUnderlying - 1));
+        IERC20(underlyingToken).transfer(address(this), 1e27 - remainingAmount);
+        console.log("Balance of exerciser:", IERC20(underlyingToken).balanceOf(address(exerciser)));
+
+        // exercise options tokens
+        DiscountExerciseParams memory params =
+            DiscountExerciseParams({maxPaymentAmount: expectedPaymentAmount, deadline: type(uint256).max, isInstantExit: true});
+        (uint256 paymentAmount,,,) = optionsToken.exercise(amount, recipient, address(exerciser), abi.encode(params));
+
+        // verify options tokens were transferred
+        assertEqDecimal(optionsToken.balanceOf(address(this)), 0, 18, "user still has options tokens");
+        assertEqDecimal(optionsToken.totalSupply(), 0, 18, "option tokens not burned");
+
+        // verify payment tokens were transferred
+        assertEq(paymentToken.balanceOf(address(this)), expectedPaymentAmount, "user lost payment tokens during instant exit");
+
+        assertEq(paymentToken.balanceOf(feeRecipients_[0]), 0, "fee recipient 1 didn't receive payment tokens");
+        assertEq(paymentToken.balanceOf(feeRecipients_[1]), 0, "fee recipient 2 didn't receive payment tokens");
+        assertEqDecimal(paymentAmount, 0, 18, "exercise returned wrong value");
+        assertEq(IERC20(underlyingToken).balanceOf(recipient), remainingAmount, "Recipient got wrong amount of underlying token");
+    }
+
+    function test_modeZapRedeemWithDifferentMultipliers(uint256 multiplier) public {
+        multiplier = bound(multiplier, BPS_DENOM / 10, BPS_DENOM - 1);
+        // multiplier = 8000;
+        uint256 amount = 1000e18;
+
+        address recipient = makeAddr("recipient");
+
+        // mint options tokens
+        vm.prank(tokenAdmin);
+        optionsToken.mint(address(this), 2 * amount);
+
+        vm.prank(owner);
+        exerciser.setMultiplier(multiplier);
+        uint256 expectedPaymentAmount = amount.mulWadUp(ORACLE_INIT_TWAP_VALUE) * 4;
+        deal(address(paymentToken), address(this), expectedPaymentAmount);
+
+        uint256 underlyingBalance =
+            IERC20(underlyingToken).balanceOf(address(this)) + paymentToken.balanceOf(address(this)).divWadUp(oracle.getPrice());
+        console.log("Price: ", oracle.getPrice());
+        console.log("Balance before: ", underlyingBalance);
+        console.log("Underlying amount before: ", IERC20(underlyingToken).balanceOf(address(this)));
+
+        // exercise options tokens -> redeem
+        DiscountExerciseParams memory params =
+            DiscountExerciseParams({maxPaymentAmount: expectedPaymentAmount, deadline: type(uint256).max, isInstantExit: false});
+        (uint256 paymentAmount,,,) = optionsToken.exercise(amount, address(this), address(exerciser), abi.encode(params));
+
+        uint256 underlyingBalanceAfterRedeem =
+            IERC20(underlyingToken).balanceOf(address(this)) + paymentToken.balanceOf(address(this)).divWadUp(oracle.getPrice());
+        console.log("Price: ", oracle.getPrice());
+        console.log("Underlying amount after redeem: ", IERC20(underlyingToken).balanceOf(address(this)));
+        console.log("Balance after redeem: ", underlyingBalanceAfterRedeem);
+
+        assertGt(underlyingBalanceAfterRedeem, underlyingBalance, "Redeem not profitable");
+        uint256 redeemProfit = underlyingBalanceAfterRedeem - underlyingBalance;
+
+        // exercise options tokens -> zap
+        params = DiscountExerciseParams({maxPaymentAmount: expectedPaymentAmount, deadline: type(uint256).max, isInstantExit: true});
+        (paymentAmount,,,) = optionsToken.exercise(amount, address(this), address(exerciser), abi.encode(params));
+
+        uint256 underlyingBalanceAfterZap =
+            IERC20(underlyingToken).balanceOf(address(this)) + paymentToken.balanceOf(address(this)).divWadUp(oracle.getPrice());
+        console.log("Price: ", oracle.getPrice());
+        console.log("Underlying amount after zap: ", IERC20(underlyingToken).balanceOf(address(this)));
+        console.log("Balance after zap: ", underlyingBalanceAfterZap);
+
+        assertGt(underlyingBalanceAfterZap, underlyingBalanceAfterRedeem, "Zap not profitable");
+        uint256 zapProfit = underlyingBalanceAfterZap - underlyingBalanceAfterRedeem;
+
+        assertGt(redeemProfit, zapProfit, "Profits from zap is greater than profits from redeem");
+
+        assertEq(redeemProfit - redeemProfit.mulDivUp(INSTANT_EXIT_FEE, BPS_DENOM), zapProfit, "Zap profit is different than redeem profit minus fee");
     }
 }

@@ -6,6 +6,7 @@ import {IUniswapV3Pool} from "v3-core/interfaces/IUniswapV3Pool.sol";
 contract MockUniswapPool is IUniswapV3Pool {
     int56[2] cumulatives;
     address public token0;
+    address public token1;
 
     function setCumulatives(int56[2] memory value) external {
         cumulatives = value;
@@ -13,6 +14,10 @@ contract MockUniswapPool is IUniswapV3Pool {
 
     function setToken0(address value) external {
         token0 = value;
+    }
+
+    function setToken1(address value) external {
+        token1 = value;
     }
 
     function observe(uint32[] calldata secondsAgos)
@@ -38,8 +43,6 @@ contract MockUniswapPool is IUniswapV3Pool {
     {}
 
     function factory() external view override returns (address) {}
-
-    function token1() external view override returns (address) {}
 
     function fee() external view override returns (uint24) {}
 

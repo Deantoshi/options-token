@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import {Owned} from "solmate/auth/Owned.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
-
+import {ERC20} from "solmate/tokens/ERC20.sol";
 import {IOracle} from "../interfaces/IOracle.sol";
 import {IThenaPair} from "../interfaces/IThenaPair.sol";
 
@@ -64,6 +64,7 @@ contract ThenaOracle is IOracle, Owned {
     /// -----------------------------------------------------------------------
 
     constructor(IThenaPair thenaPair_, address token, address owner_, uint56 secs_, uint128 minPrice_) Owned(owner_) {
+        if (ERC20(thenaPair_.token0()).decimals() != 18 || ERC20(thenaPair_.token1()).decimals() != 18) revert ThenaOracle__InvalidParams();
         if (thenaPair_.stable()) revert ThenaOracle__StablePairsUnsupported();
         if (thenaPair_.token0() != token && thenaPair_.token1() != token) revert ThenaOracle__InvalidParams();
         if (secs_ < MIN_SECS) revert ThenaOracle__InvalidWindow();
