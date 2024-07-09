@@ -2,8 +2,6 @@
 
 pragma solidity ^0.8.0;
 
-import {IOptionsToken} from "./IOptionsToken.sol";
-
 /* Errors */
 error OptionsCompounder__NotExerciseContract();
 error OptionsCompounder__TooMuchAssetsLoaned();
