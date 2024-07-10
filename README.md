@@ -1,3 +1,18 @@
+# **Table of content**
+- [Description](#description)
+  - [OptionsToken](#optionstoken)
+  - [OptionsCompounder](#optionscompounder)
+- [Installation](#installation)
+  - [Local Development](#local-development)
+- [Testing](#testing)
+  - [Dynamic](#dynamic)
+  - [Static](#static)
+- [Deployment](#deployment)
+- [Checklist](#checklist)
+- [Frontend integration](#frontend-integration)
+
+
+
 # Description 
 ## OptionsToken
 
@@ -1657,3 +1672,57 @@ src/exercise/BaseExercise.sol#L55
 Parameter [BaseExercise.setFees(address[],uint256[])._feeBPS](src/exercise/BaseExercise.sol#L55) is not in mixedCase
 
 src/exercise/BaseExercise.sol#L55
+
+# Frontend Integration
+
+Frontend shall allow to go through 3 different scenarios:
+- Pay [PaymentTokens](#paymenttoken) to [**redeem**](#redeem-flow) [UnderlyingTokens](#underlyingtoken) from OptionsTokens
+- [**Zap**](#zap-flow) OptionsTokens into the [UnderlyingTokens](#underlyingtoken)
+- [**Claim**](#claim-flow---optional) not exercised [UnderlyingTokens](#underlyingtoken) (due to lack of funds in exercise contract) -> this is probably optional frontend feature
+
+## Redeem flow
+ - Standard ERC20 approve action on [PaymentToken](#paymenttoken) 
+   - Note: `getPaymentAmount(uint256 amount)` interface may be usefull to get correct amount of PaymentToken needed.
+ - Exercise optionsToken with following parameters:
+   - amount of options tokens to spend (defined by user)
+   - recipient of the [UnderlyingTokens](#underlyingtoken) transferred during exercise (user address)
+   - option of the exercise -> it is DiscountExercise contract address
+   - encoded params:
+     - maxPaymentAmount - calculated maximal payment amount (amount * price * multiplier). Price can be get from oracle contract using interface `getPrice()`. Multiplier can be get from DiscountExercise contract using interface `multiplier()`
+     - deadline - current block timestamp
+     - isInstantExit - determines whether it is redeem (false) or zap (true) action. **Shall be hardcoded to false.**
+ - Events emitted:
+   - `Exercise(address indexed sender, address indexed recipient, uint256 amount, address data0, uint256 data1, uint256 data2)` - from OptionsToken contract. data0, data1, data2 - are not used in this case.
+   - `Exercised(from, recipient, underlyingAmount, paymentAmount)` from DiscountExercise contract
+ - Note: Amount of [UnderlyingTokens](#underlyingtoken) to receive from redeeming is the same amount that is specified for optionsTokens.
+
+## Zap flow
+ - Call `exercise(uint256 amount, address recipient, address option, bytes calldata params)` from  optionsToken contract with following parameters:
+   - amount of options tokens to spend (defined by user)
+   - recipient of the [UnderlyingTokens](#underlyingtoken) transferred during exercise (user address)
+   - option of the exercise -> it is DiscountExercise contract address
+   - encoded params:
+     - maxPaymentAmount - calculated maximal payment amount (amount * price * multiplier). Price can be get from oracle contract using interface `getPrice()`. Multiplier can be get from DiscountExercise contract using interface `multiplier()`
+     - deadline - current block timestamp
+     - isInstantExit - determines whether it is redeem (false) or zap (true) action. **Shall be hardcoded to true.**
+ - Events emitted:
+   - `Exercise(address indexed sender, address indexed recipient, uint256 amount, address data0, uint256 data1, uint256 data2)` - from OptionsToken contract. data0, data1, data2 - are not used in this case.
+   - `Exercised(from, recipient, underlyingAmount, paymentAmount)` from DiscountExercise contract
+ - Note: Amount of [UnderlyingTokens](#underlyingtoken) to receive from zapping is: amountOfOTokens * (1 - multiplier) * (1 - instantExitFee). Everything is denominated in BPS (10 000). InstantExitFee can be get by calling `instantExitFee()`.
+ - Note: `getPaymentAmount(uint256 amount)` interface may be usefull to get correct amount of PaymentToken needed.
+ - Note: Usually swap action happens here so standard events for swapping are here, but contract handles all actions like approvals etc
+
+## Claim flow - optional
+- Call `claim(address to)` with address of recipient of the [UnderlyingTokens](#underlyingtoken) transferred during claiming process
+- `Claimed(amount)` event is emitted
+
+## Changelog
+Main change between version 1.0.0 deployed on Harbor is the zap feature which requires additional variable in `params` argument (`isInstantExit`) of the `exercise(uint256 amount, address recipient, address option, bytes calldata params)` interface. 
+Now frontend shall allow to obtain [UnderlyingTokens](#underlyingtoken) in two ways (redeem and zap).
+
+## Legend
+### PaymentToken
+Token used to pay for exercising options token. Ironclad -> MODE, Harbor -> WBNB
+### UnderlyingToken
+Token which can be obtained from exercising. Ironclad -> ICL, Harbor -> HBR
+
