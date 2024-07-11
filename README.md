@@ -32,8 +32,8 @@ The user will always interact with the OptionsToken itself, and never with any e
 3. DiscountExercise decodes the parameters for the exercise function on the chosen exercise contract, and calls the specified function. In the case of zapping in DiscountExercise, the parameters are maxPaymentAmount, deadline, and isInstantExit set to true.
 4. OptionsTokens are burnt.
 5. A penalty fee in the form of underlying tokens (available in the contract) is calculated, then conditionally swapped to the desired token and distributed to the fee recipients.
-    a. Swapping and distribution occur only when the fee amount exceeds a specified trigger to avoid swapping small amounts.
-    b. The transaction reverts if the minimal desired amount of desired tokens is not obtained.
+    - Swapping and distribution occur only when the fee amount exceeds a specified trigger to avoid swapping small amounts.
+    - The transaction reverts if the minimal desired amount of desired tokens is not obtained.
 6. The underlying tokens available in the DiscountExercise contract are sent to the user. The amount of underlying tokens is discounted by the multiplier and reduced by the penalty fee.
 
 #### REDEEM
@@ -41,8 +41,8 @@ The user will always interact with the OptionsToken itself, and never with any e
 2. User calls exercise on the OptionsToken, specifying their desired exercise contract and encoding exercise parameters
 3. OptionsToken validates the exercise contract, decodes the parameters for the exercise function on the exercise contract of choice, and calls said function. In the case of DiscountExercise, the params are maxPaymentAmount, deadline and isInstantExit set to false.
 4. oTokens are burnt, WETH is sent to the treasury, and underlyingTokens, discounted by the multiplier, are sent to the user exercising
-    a. Can be priced using balancer, thena, univ3 twap oracles
-    b. Reverts above maxPaymentAmount or past deadline
+    - Can be priced using balancer, thena, univ3 twap oracles
+    - Reverts above maxPaymentAmount or past deadline
 
 ## OptionsCompounder
 
@@ -56,12 +56,12 @@ The Compounder platform facilitates the utilization of flash loans to exercise t
 4. Calculate Payment Amount from Discount Exercise given oToken balance
 5. Flashloan the necessary amount of funds to exercise in paymentToken
 6. Callback from flashloan is called
-    a. oTokens are exercised using paymentToken that was flash loaned
-    b. Underlying token is received by the strategy
-    c. Calculate minAmountOut by directly querying the same oracle consumed by the DiscountExercise we interact with
-    d. Swap entire amount into payment token to repay flashloan
-    e. Assess profitability in units of paymentToken, swap profits to want of the strategy if not same token as paymentToken
-    f. Emit event that reflects the oTokens compounded
+    - oTokens are exercised using paymentToken that was flash loaned
+    - Underlying token is received by the strategy
+    - Calculate minAmountOut by directly querying the same oracle consumed by the DiscountExercise we interact with
+    - Swap entire amount into payment token to repay flashloan
+    - Assess profitability in units of paymentToken, swap profits to want of the strategy if not same token as paymentToken
+    - Emit event that reflects the oTokens compounded
 
 # Installation
 
@@ -143,11 +143,11 @@ There are 2 deployment scripts. One is for swapper and paths updates and second 
 
 - [x]  Contracts pass all tests
 - [x]  Contracts deployed to testnet
-  - [x]  [DiscountExercise](https://explorer.mode.network/address/0xeE89a9e5022f967Fc2DDb0dEbfFb72bFc4FB4692?tab=contract)
-  - [x]  [ReaperSwapper](https://explorer.mode.network/address/0xd57957A73634B860f0E8c1907371BD4f3e42C2C3?tab=contract)
-  - [x]  [VeloOracle](https://explorer.mode.network/address/0x52B2732b29B4d6444e9930D7C328c082dA033d66?tab=contract)
-  - [x]  [OptionsToken](https://explorer.mode.network/address/0x8013e0c13D9262094D0A2cFC8DF2Aa11cE4D8203?tab=contract)
-  - [x]  [OptionsCompounder](https://explorer.mode.network/address/0x80c1FccB0c01A1EEafB422719A6A1048Fe92033f?=contract)
+  - [x]  [DiscountExercise](https://explorer.mode.network/address/0xcb727532e24dFe22E74D3892b998f5e915676Da8?tab=contract)
+  - [x]  [ReaperSwapper](https://explorer.mode.network/address/0x63D170618A8Ed1987F3CA6391b5e2F6a4554Cf53?tab=contract)
+  - [x]  [VeloOracle](https://explorer.mode.network/address/0xDaA2c821428f62e1B08009a69CE824253CCEE5f9?tab=contract)
+  - [x]  [OptionsToken](https://explorer.mode.network/address/0x3B6eA0fA8A487c90007ce120a83920fd52b06f6D?tab=contract)
+  - [ ]  [OptionsCompounder](https://explorer.mode.network/address/0x80c1FccB0c01A1EEafB422719A6A1048Fe92033f?=contract)
 - [x]  Does this deployment have access to funds, either directly or indirectly (zappers, leveragers, etc.)?
 
 Minimum security if Yes:

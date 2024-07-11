@@ -35,6 +35,14 @@ contract OptionsCompounder is IFlashLoanReceiver, OwnableUpgradeable, UUPSUpgrad
         uint256 minPaymentAmount;
     }
 
+    /* Modifier */
+    modifier onlyStrat(address _strat) {
+        if (!_isStratAvailable(_strat)) {
+            revert OptionsCompounder__OnlyStratAllowed();
+        }
+        _;
+    }
+
     /* Constants */
     uint8 constant MAX_NR_OF_FLASHLOAN_ASSETS = 1;
 
@@ -51,6 +59,7 @@ contract OptionsCompounder is IFlashLoanReceiver, OwnableUpgradeable, UUPSUpgrad
 
     uint256 public upgradeProposalTime;
     address public nextImplementation;
+    address[] private strats;
 
     /* Events */
     event OTokenCompounded(uint256 indexed gainInPayment, uint256 indexed returned);
@@ -69,17 +78,23 @@ contract OptionsCompounder is IFlashLoanReceiver, OwnableUpgradeable, UUPSUpgrad
      * @param _addressProvider - address lending pool address provider - necessary for flashloan operations
      * @param _swapProps - swap properites for all swaps in the contract
      * @param _oracle - oracles used in all swaps in the contract
+     * @param _strats - list of strategies used to call harvestOTokens()
      *
      */
-    function initialize(address _optionsToken, address _addressProvider, address _swapper, SwapProps memory _swapProps, IOracle _oracle)
-        public
-        initializer
-    {
+    function initialize(
+        address _optionsToken,
+        address _addressProvider,
+        address _swapper,
+        SwapProps memory _swapProps,
+        IOracle _oracle,
+        address[] memory _strats
+    ) public initializer {
         __Ownable_init();
         _setOptionsToken(_optionsToken);
         _setSwapProps(_swapProps);
         _setOracle(_oracle);
         _setSwapper(_swapper);
+        _setStrats(_strats);
         flashloanFinished = true;
         _setAddressProvider(_addressProvider);
         __UUPSUpgradeable_init();
@@ -143,6 +158,43 @@ contract OptionsCompounder is IFlashLoanReceiver, OwnableUpgradeable, UUPSUpgrad
         lendingPool = ILendingPool(addressProvider.getLendingPool());
     }
 
+    function setStrats(address[] memory _strats) external onlyOwner {
+        _setStrats(_strats);
+    }
+
+    function _setStrats(address[] memory _strats) internal {
+        _deleteStrats();
+        for (uint256 idx = 0; idx < _strats.length; idx++) {
+            _addStrat(_strats[idx]);
+        }
+    }
+
+    function addStrat(address _strat) external onlyOwner {
+        _addStrat(_strat);
+    }
+
+    /**
+     * @dev Function will be used sporadically with number of strategies less than 10, so no need to add any gas optimization
+     */
+    function _addStrat(address _strat) internal {
+        if (_strat == address(0)) {
+            revert OptionsCompounder__ParamHasAddressZero();
+        }
+        if (!_isStratAvailable(_strat)) {
+            strats.push(_strat);
+        }
+    }
+
+    function deleteStrats() external onlyOwner {
+        _deleteStrats();
+    }
+
+    function _deleteStrats() internal {
+        if (strats.length != 0) {
+            delete strats;
+        }
+    }
+
     /**
      * @notice Function initiates flashloan to get assets for exercising options.
      * @dev Can be executed only by keeper role. Reentrance protected.
@@ -150,7 +202,7 @@ contract OptionsCompounder is IFlashLoanReceiver, OwnableUpgradeable, UUPSUpgrad
      * @param exerciseContract - address of exercise contract (DiscountContract)
      * @param minWantAmount - minimal amount of want when the flashloan is considered as profitable
      */
-    function harvestOTokens(uint256 amount, address exerciseContract, uint256 minWantAmount) external {
+    function harvestOTokens(uint256 amount, address exerciseContract, uint256 minWantAmount) external onlyStrat(msg.sender) {
         _harvestOTokens(amount, exerciseContract, minWantAmount);
     }
 
@@ -356,6 +408,26 @@ contract OptionsCompounder is IFlashLoanReceiver, OwnableUpgradeable, UUPSUpgrad
     /**
      * Getters **********************************
      */
+    function isStratAvailable(address strat) external view returns (bool) {
+        return _isStratAvailable(strat);
+    }
+
+    function _isStratAvailable(address strat) internal view returns (bool) {
+        bool isStrat = false;
+        address[] memory _strats = strats;
+        for (uint256 idx = 0; idx < _strats.length; idx++) {
+            if (strat == _strats[idx]) {
+                isStrat = true;
+                break;
+            }
+        }
+        return isStrat;
+    }
+
+    function getStrats() external view returns (address[] memory) {
+        return strats;
+    }
+
     function getOptionTokenAddress() external view returns (address) {
         return address(optionsToken);
     }

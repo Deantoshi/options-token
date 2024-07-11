@@ -27,6 +27,8 @@ contract ItModeOptionsCompounder is Common {
     // ReaperStrategyGranary strategy;
     IOracle oracle;
 
+    address[] strategies;
+
     function setUp() public {
         /* Common assignments */
         ExchangeType exchangeType = ExchangeType.VeloSolid;
@@ -96,11 +98,12 @@ contract ItModeOptionsCompounder is Common {
         optionsTokenProxy.setExerciseContract(address(exerciser), true);
 
         /* Strategy deployment */
+        strategies.push(makeAddr("strategy"));
         optionsCompounder = new OptionsCompounder();
         tmpProxy = new ERC1967Proxy(address(optionsCompounder), "");
         optionsCompounder = OptionsCompounder(address(tmpProxy));
         console.log("Initializing...");
-        optionsCompounder.initialize(address(optionsTokenProxy), address(addressProvider), address(reaperSwapper), swapProps, oracle);
+        optionsCompounder.initialize(address(optionsTokenProxy), address(addressProvider), address(reaperSwapper), swapProps, oracle, strategies);
 
         vm.stopPrank();
 
@@ -127,18 +130,19 @@ contract ItModeOptionsCompounder is Common {
 
         /* Prepare option tokens - distribute them to the specified strategy 
         and approve for spending */
-        fixture_prepareOptionToken(amount, address(optionsCompounder), address(this), optionsTokenProxy, tokenAdmin);
+        fixture_prepareOptionToken(amount, address(optionsCompounder), strategies[0], optionsTokenProxy, tokenAdmin);
 
         /* Check balances before compounding */
-        uint256 paymentTokenBalance = paymentToken.balanceOf(address(optionsCompounder));
+        uint256 paymentTokenBalance = paymentToken.balanceOf(strategies[0]);
 
         // vm.startPrank(address(strategy));
         /* already approved in fixture_prepareOptionToken */
+        vm.prank(strategies[0]);
         optionsCompounder.harvestOTokens(amount, address(exerciser), minAmount);
         // vm.stopPrank();
 
         /* Assertions */
-        assertGt(paymentToken.balanceOf(address(this)), paymentTokenBalance + minAmount, "Gain not greater than 0");
+        assertGt(paymentToken.balanceOf(strategies[0]), paymentTokenBalance + minAmount, "Gain not greater than 0");
         assertEq(optionsTokenProxy.balanceOf(address(optionsCompounder)), 0, "Options token balance in compounder is 0");
         assertEq(paymentToken.balanceOf(address(optionsCompounder)), 0, "Payment token balance in compounder is 0");
     }
@@ -149,7 +153,12 @@ contract ItModeOptionsCompounder is Common {
         vm.assume(randomOption != address(0));
         vm.assume(hacker != owner);
         address addressProvider = makeAddr("AddressProvider");
+        address[] memory strats = new address[](2);
+        strats[0] = makeAddr("strat1");
+        strats[1] = makeAddr("strat2");
+
         SwapProps memory swapProps = SwapProps(address(reaperSwapper), address(swapRouter), ExchangeType.UniV3, 200);
+
         /* Hacker tries to perform harvest */
         vm.startPrank(hacker);
 
@@ -165,6 +174,103 @@ contract ItModeOptionsCompounder is Common {
 
         vm.expectRevert("Ownable: caller is not the owner");
         optionsCompounder.setAddressProvider(addressProvider);
+
+        vm.expectRevert("Ownable: caller is not the owner");
+        optionsCompounder.setStrats(strats);
+
+        vm.expectRevert("Ownable: caller is not the owner");
+        optionsCompounder.addStrat(strats[0]);
+
+        vm.expectRevert("Ownable: caller is not the owner");
+        optionsCompounder.deleteStrats();
+
+        vm.expectRevert(bytes4(keccak256("OptionsCompounder__OnlyStratAllowed()")));
+        optionsCompounder.harvestOTokens(amount, address(exerciser), 1);
+
+        vm.stopPrank();
+
+        /* Admin tries to set different option token */
+        vm.startPrank(owner);
+        optionsCompounder.setOptionsToken(randomOption);
+        vm.stopPrank();
+        assertEq(address(optionsCompounder.getOptionTokenAddress()), randomOption);
+    }
+
+    function test_stratsSettings(address randomOption, uint256 amount) public {
+        /* Test vectors definition */
+        amount = bound(amount, maxUnderlyingAmount / 10, underlyingToken.balanceOf(address(exerciser)) / 10);
+        vm.assume(randomOption != address(0));
+        address[] memory strats = new address[](2);
+        uint256 minAmount = 5;
+        strats[0] = makeAddr("strat1");
+        strats[1] = makeAddr("strat2");
+
+        fixture_prepareOptionToken(3 * amount, address(optionsCompounder), strats[0], optionsTokenProxy, tokenAdmin);
+        fixture_prepareOptionToken(3 * amount, address(optionsCompounder), strats[1], optionsTokenProxy, tokenAdmin);
+
+        vm.startPrank(strats[0]);
+        vm.expectRevert(bytes4(keccak256("OptionsCompounder__OnlyStratAllowed()")));
+        optionsCompounder.harvestOTokens(amount, address(exerciser), minAmount);
+        vm.stopPrank();
+
+        address[] memory strategies = optionsCompounder.getStrats();
+        for (uint256 idx = 0; idx < strategies.length; idx++) {
+            console.log("Strat: %s %s", idx, strategies[idx]);
+        }
+
+        vm.prank(owner);
+        optionsCompounder.setStrats(strats);
+
+        strategies = optionsCompounder.getStrats();
+        for (uint256 idx = 0; idx < strategies.length; idx++) {
+            console.log("Strat: %s %s", idx, strategies[idx]);
+        }
+
+        assertEq(strategies.length, 2);
+
+        vm.prank(strats[0]);
+        optionsCompounder.harvestOTokens(amount, address(exerciser), minAmount);
+
+        vm.prank(strats[1]);
+        optionsCompounder.harvestOTokens(amount, address(exerciser), minAmount);
+
+        vm.prank(owner);
+        optionsCompounder.addStrat(strats[1]);
+
+        strategies = optionsCompounder.getStrats();
+        for (uint256 idx = 0; idx < strategies.length; idx++) {
+            console.log("Strat: %s %s", idx, strategies[idx]);
+        }
+        assertEq(strategies.length, 2);
+
+        vm.prank(owner);
+        optionsCompounder.deleteStrats();
+
+        strategies = optionsCompounder.getStrats();
+        for (uint256 idx = 0; idx < strategies.length; idx++) {
+            console.log("Strat: %s %s", idx, strategies[idx]);
+        }
+        assertEq(strategies.length, 0);
+
+        vm.startPrank(strats[0]);
+        vm.expectRevert(bytes4(keccak256("OptionsCompounder__OnlyStratAllowed()")));
+        optionsCompounder.harvestOTokens(amount, address(exerciser), minAmount);
+        vm.startPrank(strats[1]);
+        vm.expectRevert(bytes4(keccak256("OptionsCompounder__OnlyStratAllowed()")));
+        optionsCompounder.harvestOTokens(amount, address(exerciser), minAmount);
+        vm.stopPrank();
+
+        vm.prank(owner);
+        optionsCompounder.addStrat(strats[1]);
+
+        strategies = optionsCompounder.getStrats();
+        for (uint256 idx = 0; idx < strategies.length; idx++) {
+            console.log("Strat: %s %s", idx, strategies[idx]);
+        }
+        assertEq(strategies.length, 1);
+
+        vm.startPrank(strats[1]);
+        optionsCompounder.harvestOTokens(amount, address(exerciser), minAmount);
         vm.stopPrank();
 
         /* Admin tries to set different option token */
@@ -175,13 +281,12 @@ contract ItModeOptionsCompounder is Common {
     }
 
     function test_flashloanNegativeScenario_highTwapValueAndMultiplier(uint256 amount) public {
-        address strategy = makeAddr("Strategy");
         /* Test vectors definition */
         amount = bound(amount, maxUnderlyingAmount / 10, underlyingToken.balanceOf(address(exerciser)));
 
         /* Prepare option tokens - distribute them to the specified strategy
         and approve for spending */
-        fixture_prepareOptionToken(amount, address(optionsCompounder), strategy, optionsTokenProxy, tokenAdmin);
+        fixture_prepareOptionToken(amount, address(optionsCompounder), strategies[0], optionsTokenProxy, tokenAdmin);
 
         /* Decrease option discount in order to make redemption not profitable */
         /* Notice: Multiplier must be higher than denom because of oracle inaccuracy (initTwap) or just change initTwap */
@@ -190,17 +295,15 @@ contract ItModeOptionsCompounder is Common {
         vm.stopPrank();
         /* Increase TWAP price to make flashloan not profitable */
 
+        vm.startPrank(strategies[0]);
         /* Notice: additional protection is in exerciser: Exercise__SlippageTooHigh */
         vm.expectRevert(bytes4(keccak256("OptionsCompounder__FlashloanNotProfitableEnough()")));
-
-        vm.startPrank(strategy);
         /* Already approved in fixture_prepareOptionToken */
         optionsCompounder.harvestOTokens(amount, address(exerciser), NON_ZERO_PROFIT);
         vm.stopPrank();
     }
 
     function test_flashloanNegativeScenario_tooHighMinAmounOfWantExpected(uint256 amount, uint256 minAmountOfPayment) public {
-        address strategy = makeAddr("Strategy");
         /* Test vectors definition */
         amount = bound(amount, maxUnderlyingAmount / 10, underlyingToken.balanceOf(address(exerciser)));
         /* Decrease option discount in order to make redemption not profitable */
@@ -215,16 +318,17 @@ contract ItModeOptionsCompounder is Common {
 
         /* Prepare option tokens - distribute them to the specified strategy
         and approve for spending */
-        fixture_prepareOptionToken(amount, address(optionsCompounder), address(this), optionsTokenProxy, tokenAdmin);
+        fixture_prepareOptionToken(amount, address(optionsCompounder), strategies[0], optionsTokenProxy, tokenAdmin);
 
+        vm.startPrank(strategies[0]);
         /* Notice: additional protection is in exerciser: Exercise__SlippageTooHigh */
         vm.expectRevert(bytes4(keccak256("OptionsCompounder__FlashloanNotProfitableEnough()")));
         /* Already approved in fixture_prepareOptionToken */
         optionsCompounder.harvestOTokens(amount, address(exerciser), minAmountOfPayment);
+        vm.stopPrank();
     }
 
     function test_callExecuteOperationWithoutFlashloanTrigger(uint256 amount, address executor) public {
-        address strategy = makeAddr("Strategy");
         /* Test vectors definition */
         amount = bound(amount, maxUnderlyingAmount / 10, underlyingToken.balanceOf(address(exerciser)));
 
@@ -244,7 +348,6 @@ contract ItModeOptionsCompounder is Common {
     }
 
     function test_harvestCallWithWrongExerciseContract(uint256 amount, address fuzzedExerciser) public {
-        address strategy = makeAddr("Strategy");
         /* Test vectors definition */
         amount = bound(amount, maxUnderlyingAmount / 10, underlyingToken.balanceOf(address(exerciser)));
 
@@ -252,10 +355,10 @@ contract ItModeOptionsCompounder is Common {
 
         /* Prepare option tokens - distribute them to the specified strategy
         and approve for spending */
-        fixture_prepareOptionToken(amount, address(optionsCompounder), strategy, optionsTokenProxy, tokenAdmin);
+        fixture_prepareOptionToken(amount, address(optionsCompounder), strategies[0], optionsTokenProxy, tokenAdmin);
 
-        vm.startPrank(strategy);
         /* Assertion */
+        vm.startPrank(strategies[0]);
         vm.expectRevert(bytes4(keccak256("OptionsCompounder__NotExerciseContract()")));
         optionsCompounder.harvestOTokens(amount, fuzzedExerciser, NON_ZERO_PROFIT);
         vm.stopPrank();
