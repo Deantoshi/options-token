@@ -181,9 +181,6 @@ contract ItModeOptionsCompounder is Common {
         vm.expectRevert("Ownable: caller is not the owner");
         optionsCompounder.addStrat(strats[0]);
 
-        vm.expectRevert("Ownable: caller is not the owner");
-        optionsCompounder.deleteStrats();
-
         vm.expectRevert(bytes4(keccak256("OptionsCompounder__OnlyStratAllowed()")));
         optionsCompounder.harvestOTokens(amount, address(exerciser), 1);
 
@@ -193,7 +190,7 @@ contract ItModeOptionsCompounder is Common {
         vm.startPrank(owner);
         optionsCompounder.setOptionsToken(randomOption);
         vm.stopPrank();
-        assertEq(address(optionsCompounder.getOptionTokenAddress()), randomOption);
+        assertEq(address(optionsCompounder.optionsToken()), randomOption);
     }
 
     function test_stratsSettings(address randomOption, uint256 amount) public {
@@ -213,20 +210,20 @@ contract ItModeOptionsCompounder is Common {
         optionsCompounder.harvestOTokens(amount, address(exerciser), minAmount);
         vm.stopPrank();
 
-        address[] memory strategies = optionsCompounder.getStrats();
-        for (uint256 idx = 0; idx < strategies.length; idx++) {
-            console.log("Strat: %s %s", idx, strategies[idx]);
+        address[] memory receivedStrategies = optionsCompounder.getStrats();
+        for (uint256 idx = 0; idx < receivedStrategies.length; idx++) {
+            console.log("Strat: %s %s", idx, receivedStrategies[idx]);
         }
 
         vm.prank(owner);
         optionsCompounder.setStrats(strats);
 
-        strategies = optionsCompounder.getStrats();
-        for (uint256 idx = 0; idx < strategies.length; idx++) {
-            console.log("Strat: %s %s", idx, strategies[idx]);
+        receivedStrategies = optionsCompounder.getStrats();
+        for (uint256 idx = 0; idx < receivedStrategies.length; idx++) {
+            console.log("Strat: %s %s", idx, receivedStrategies[idx]);
         }
 
-        assertEq(strategies.length, 2);
+        assertEq(receivedStrategies.length, 2);
 
         vm.prank(strats[0]);
         optionsCompounder.harvestOTokens(amount, address(exerciser), minAmount);
@@ -237,20 +234,21 @@ contract ItModeOptionsCompounder is Common {
         vm.prank(owner);
         optionsCompounder.addStrat(strats[1]);
 
-        strategies = optionsCompounder.getStrats();
-        for (uint256 idx = 0; idx < strategies.length; idx++) {
-            console.log("Strat: %s %s", idx, strategies[idx]);
+        receivedStrategies = optionsCompounder.getStrats();
+        for (uint256 idx = 0; idx < receivedStrategies.length; idx++) {
+            console.log("Strat: %s %s", idx, receivedStrategies[idx]);
         }
-        assertEq(strategies.length, 2);
+        assertEq(receivedStrategies.length, 2);
 
+        address[] memory tmpStrats;
         vm.prank(owner);
-        optionsCompounder.deleteStrats();
+        optionsCompounder.setStrats(tmpStrats);
 
-        strategies = optionsCompounder.getStrats();
-        for (uint256 idx = 0; idx < strategies.length; idx++) {
-            console.log("Strat: %s %s", idx, strategies[idx]);
+        receivedStrategies = optionsCompounder.getStrats();
+        for (uint256 idx = 0; idx < receivedStrategies.length; idx++) {
+            console.log("Strat: %s %s", idx, receivedStrategies[idx]);
         }
-        assertEq(strategies.length, 0);
+        assertEq(receivedStrategies.length, 0);
 
         vm.startPrank(strats[0]);
         vm.expectRevert(bytes4(keccak256("OptionsCompounder__OnlyStratAllowed()")));
@@ -263,11 +261,11 @@ contract ItModeOptionsCompounder is Common {
         vm.prank(owner);
         optionsCompounder.addStrat(strats[1]);
 
-        strategies = optionsCompounder.getStrats();
-        for (uint256 idx = 0; idx < strategies.length; idx++) {
-            console.log("Strat: %s %s", idx, strategies[idx]);
+        receivedStrategies = optionsCompounder.getStrats();
+        for (uint256 idx = 0; idx < receivedStrategies.length; idx++) {
+            console.log("Strat: %s %s", idx, receivedStrategies[idx]);
         }
-        assertEq(strategies.length, 1);
+        assertEq(receivedStrategies.length, 1);
 
         vm.startPrank(strats[1]);
         optionsCompounder.harvestOTokens(amount, address(exerciser), minAmount);
@@ -277,7 +275,7 @@ contract ItModeOptionsCompounder is Common {
         vm.startPrank(owner);
         optionsCompounder.setOptionsToken(randomOption);
         vm.stopPrank();
-        assertEq(address(optionsCompounder.getOptionTokenAddress()), randomOption);
+        assertEq(address(optionsCompounder.optionsToken()), randomOption);
     }
 
     function test_flashloanNegativeScenario_highTwapValueAndMultiplier(uint256 amount) public {

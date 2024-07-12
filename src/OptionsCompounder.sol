@@ -36,8 +36,8 @@ contract OptionsCompounder is IFlashLoanReceiver, OwnableUpgradeable, UUPSUpgrad
     }
 
     /* Modifier */
-    modifier onlyStrat(address _strat) {
-        if (!_isStratAvailable(_strat)) {
+    modifier onlyStrat() {
+        if (!_isStratAvailable(msg.sender)) {
             revert OptionsCompounder__OnlyStratAllowed();
         }
         _;
@@ -185,10 +185,6 @@ contract OptionsCompounder is IFlashLoanReceiver, OwnableUpgradeable, UUPSUpgrad
         }
     }
 
-    function deleteStrats() external onlyOwner {
-        _deleteStrats();
-    }
-
     function _deleteStrats() internal {
         if (strats.length != 0) {
             delete strats;
@@ -202,7 +198,7 @@ contract OptionsCompounder is IFlashLoanReceiver, OwnableUpgradeable, UUPSUpgrad
      * @param exerciseContract - address of exercise contract (DiscountContract)
      * @param minWantAmount - minimal amount of want when the flashloan is considered as profitable
      */
-    function harvestOTokens(uint256 amount, address exerciseContract, uint256 minWantAmount) external onlyStrat(msg.sender) {
+    function harvestOTokens(uint256 amount, address exerciseContract, uint256 minWantAmount) external onlyStrat {
         _harvestOTokens(amount, exerciseContract, minWantAmount);
     }
 
@@ -426,10 +422,6 @@ contract OptionsCompounder is IFlashLoanReceiver, OwnableUpgradeable, UUPSUpgrad
 
     function getStrats() external view returns (address[] memory) {
         return strats;
-    }
-
-    function getOptionTokenAddress() external view returns (address) {
-        return address(optionsToken);
     }
 
     function ADDRESSES_PROVIDER() external view returns (ILendingPoolAddressesProvider) {
