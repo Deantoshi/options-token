@@ -130,6 +130,7 @@ There are 2 deployment scripts. One is for swapper and paths updates and second 
 - [x]  Re-entrancy
 - [x]  Flashloans
 - [x]  Access Control
+
 - [x]  (N/A) Unchecked External Calls
 - [x]  (N/A) Account abstraction/multicall issues 
 - [x]  Static analysis -> Slither
@@ -148,6 +149,10 @@ There are 2 deployment scripts. One is for swapper and paths updates and second 
   - [x]  [VeloOracle](https://explorer.mode.network/address/0xDaA2c821428f62e1B08009a69CE824253CCEE5f9?tab=contract)
   - [x]  [OptionsToken](https://explorer.mode.network/address/0x3B6eA0fA8A487c90007ce120a83920fd52b06f6D?tab=contract)
   - [ ]  [OptionsCompounder](https://explorer.mode.network/address/0x80c1FccB0c01A1EEafB422719A6A1048Fe92033f?=contract)
+- [x]  Unchecked External Calls
+- [ ]  Account abstraction/multicall issues
+- [x]  USE SLITHER
+
 - [x]  Does this deployment have access to funds, either directly or indirectly (zappers, leveragers, etc.)?
 
 Minimum security if Yes:
@@ -164,8 +169,7 @@ Action items in support of deployment:
 - [ ]  Minimum two people present for deployment
 - [x]  All developers who worked on and reviewed the contract should be included in the readme
   - Developers involved: xRave110 (change owner), Eidolon (reviewer), Zokunei (reviewer), Goober (reviewer), Beirao (reviewer)
-- [ ]  Documentation of deployment procedure if non-standard (i.e. if multiple scripts are necessary)
-  
+- [ ]  Documentation of deployment procedure if non-standard (i.e. if multiple scripts are necessary)  
 
 ## Discount Exercise Slither
 
