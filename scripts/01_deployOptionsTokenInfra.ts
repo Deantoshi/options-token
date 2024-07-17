@@ -27,7 +27,12 @@ async function main() {
     console.log(`Oracle deployed to: ${await oracle.getAddress()}`);
   }
   else{
-    oracle = await ethers.getContractAt("ThenaOracle", config.ORACLE);
+    try{
+      oracle = await ethers.getContractAt("ThenaOracle", config.ORACLE);
+    }
+    catch(error){
+      console.log("ThenaOracle NOT available due to lack of configuration");
+    }
   }
  
   // OptionsToken
@@ -48,7 +53,12 @@ async function main() {
     console.log(`Implementation: ${await getImplementationAddress(ethers.provider, await optionsToken.getAddress())}`);
   }
   else{
-    optionsToken = await ethers.getContractAt("OptionsToken", config.OPTIONS_TOKEN);
+    try{
+      optionsToken = await ethers.getContractAt("OptionsToken", config.OPTIONS_TOKEN);
+    }
+    catch(error){
+      console.log("OptionsToken NOT available due to lack of configuration");
+    }    
   }
 
   const swapProps = {
@@ -93,22 +103,29 @@ async function main() {
     console.log(`Exercise set to: ${exerciseAddress}`);
   }
   else{
-    exercise = await ethers.getContractAt("DiscountExercise", config.DISCOUNT_EXERCISE);
+    try{
+      exercise = await ethers.getContractAt("DiscountExercise", config.DISCOUNT_EXERCISE);
+    }
+    catch(error){
+      console.log("DiscountExercise NOT available due to lack of configuration");
+    }
+
   }
 
 
   // OptionsCompounder
   let optionsCompounder;
-
+  const strats = String(config.STRATS).split(",");
   if(contractsToDeploy.includes("OptionsCompounder")){
+
     const OptionsCompounder = await ethers.getContractFactory("OptionsCompounder");
   
     // console.log("Proxy deployment: ", [optionsToken, addressProvider, swapper, swapProps, oracle]);
-    console.log("Proxy deployment: ", [await optionsToken.getAddress(), addressProvider, await swapper.getAddress(), swapProps, await oracle.getAddress()]);
+    console.log("Proxy deployment: ", [await optionsToken.getAddress(), addressProvider, await swapper.getAddress(), swapProps, await oracle.getAddress(), strats]);
     
     optionsCompounder = await upgrades.deployProxy(
       OptionsCompounder,
-      [await optionsToken.getAddress(), addressProvider, await swapper.getAddress(), swapProps, await oracle.getAddress()],
+      [await optionsToken.getAddress(), addressProvider, await swapper.getAddress(), swapProps, await oracle.getAddress(), strats],
       { kind: "uups", initializer: "initialize" }
     );
   
@@ -123,7 +140,13 @@ async function main() {
     console.log(`Implementation: ${await getImplementationAddress(ethers.provider, await optionsCompounder.getAddress())}`);
   }
   else{
-    optionsCompounder = await ethers.getContractAt("OptionsCompounder", config.OPTIONS_COMPOUNDER);
+    try{
+      optionsCompounder = await ethers.getContractAt("OptionsCompounder", config.OPTIONS_COMPOUNDER);
+      await optionsCompounder.setStrats(strats);
+    }
+    catch(error){
+      console.log("OptionsCompounder NOT available due to lack of configuration");
+    }
   }
 
 }

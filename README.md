@@ -116,8 +116,84 @@ forge test
 # Deployment
 
 Inside `./scripts` there is "config.json" where can be defined deployment configurations.
-You can choose which contract to deploy by adding/removing string in CONTRACTS_TO_DEPLOY. If some contracts are removed, there must be defined the address for already existing contract on the chain (example: SWAPPER, OPTIONS_COMPOUNDER).
+You can choose which contract to deploy by adding/removing string in CONTRACTS_TO_DEPLOY. If some contracts are removed from CONTRACTS_TO_DEPLOY, there must be defined the address for already existing contract on the chain (example: SWAPPER, OPTIONS_COMPOUNDER).
 There are 2 deployment scripts. One is for swapper and paths updates and second for all optionsToken infra (swapper address must be passed here).
+
+## Examples of config.json
+### All contracts to deploy
+```
+{
+  "VERSION": "1.1.0",
+  "OWNER": <OWNER ADDRESS>,
+  "ORACLE_SOURCE": <PRICE TWAP ORACLE>,
+  "ORACLE_SECS": 1800,
+  "ORACLE_MIN_PRICE": 10000000,
+  "OT_NAME": "ICL Call Option Token",
+  "OT_SYMBOL": "oICL",
+  "OT_PAYMENT_TOKEN": "0xDfc7C877a950e49D2610114102175A06C2e3167a",
+  "OT_UNDERLYING_TOKEN": "0x95177295a394f2b9b04545fff58f4af0673e839d",
+  "OT_TOKEN_ADMIN": "0xF29dA3595351dBFd0D647857C46F8D63Fc2e68C5",
+  "VELO_ROUTER": "0x3a63171DD9BebF4D07BC782FECC7eb0b890C2A45",
+  "ADDRESS_PROVIDER": "0xEDc83309549e36f3c7FD8c2C5C54B4c8e5FA00FC",
+  "MULTIPLIER": 5000,
+  "FEE_RECIPIENTS": [
+    <TREASURY>
+  ],
+  "FEE_BPS": [
+    10000
+  ],
+  "STRATS": [
+    <STRATEGY ADDRESS>
+  ],
+  "INSTANT_EXIT_FEE": 1000,
+  "MIN_AMOUNT_TO_TRIGGER_SWAP": 1e15,
+  "CONTRACTS_TO_DEPLOY": [],
+  "SWAPPER": "0x63D170618A8Ed1987F3CA6391b5e2F6a4554Cf53",
+  "DISCOUNT_EXERCISE": "0xcb727532e24dFe22E74D3892b998f5e915676Da8",
+  "OPTIONS_TOKEN": "0x3B6eA0fA8A487c90007ce120a83920fd52b06f6D",
+  "OPTIONS_COMPOUNDER": "0xf6cf2065C35595c12B532e54ACDe5A4597e32e6e",
+  "ORACLE": "0xDaA2c821428f62e1B08009a69CE824253CCEE5f9"
+}
+```
+### Only configure options compounder (no deployments)
+```
+{
+  "VERSION": "1.1.0",
+  "OWNER": <OWNER ADDRESS>,
+  "ORACLE_SOURCE": <PRICE TWAP ORACLE>,
+  "ORACLE_SECS": 1800,
+  "ORACLE_MIN_PRICE": 10000000,
+  "OT_NAME": "ICL Call Option Token",
+  "OT_SYMBOL": "oICL",
+  "OT_PAYMENT_TOKEN": "0xDfc7C877a950e49D2610114102175A06C2e3167a",
+  "OT_UNDERLYING_TOKEN": "0x95177295a394f2b9b04545fff58f4af0673e839d",
+  "OT_TOKEN_ADMIN": "0xF29dA3595351dBFd0D647857C46F8D63Fc2e68C5",
+  "VELO_ROUTER": "0x3a63171DD9BebF4D07BC782FECC7eb0b890C2A45",
+  "ADDRESS_PROVIDER": "0xEDc83309549e36f3c7FD8c2C5C54B4c8e5FA00FC",
+  "MULTIPLIER": 5000,
+  "FEE_RECIPIENTS": [
+    <TREASURY>
+  ],
+  "FEE_BPS": [
+    10000
+  ],
+  "STRATS": [
+    <STRATEGY ADDRESS>
+  ],
+  "INSTANT_EXIT_FEE": 1000,
+  "MIN_AMOUNT_TO_TRIGGER_SWAP": 1e15,
+  "CONTRACTS_TO_DEPLOY": [
+    "OptionsToken",
+    "DiscountExercise",
+    "ThenaOracle"
+  ],
+  "SWAPPER": "0x63D170618A8Ed1987F3CA6391b5e2F6a4554Cf53",
+  "DISCOUNT_EXERCISE": "undefined",
+  "OPTIONS_TOKEN": "undefined",
+  "OPTIONS_COMPOUNDER": "undefined",
+  "ORACLE": "undefined"
+}
+```
 
 # Checklist
 
@@ -148,7 +224,7 @@ There are 2 deployment scripts. One is for swapper and paths updates and second 
   - [x]  [ReaperSwapper](https://explorer.mode.network/address/0x63D170618A8Ed1987F3CA6391b5e2F6a4554Cf53?tab=contract)
   - [x]  [VeloOracle](https://explorer.mode.network/address/0xDaA2c821428f62e1B08009a69CE824253CCEE5f9?tab=contract)
   - [x]  [OptionsToken](https://explorer.mode.network/address/0x3B6eA0fA8A487c90007ce120a83920fd52b06f6D?tab=contract)
-  - [ ]  [OptionsCompounder](https://explorer.mode.network/address/0x80c1FccB0c01A1EEafB422719A6A1048Fe92033f?=contract)
+  - [ ]  [OptionsCompounder](https://explorer.mode.network/address/0xf6cf2065C35595c12B532e54ACDe5A4597e32e6e?tab=contract)
 - [x]  Unchecked External Calls
 - [ ]  Account abstraction/multicall issues
 - [x]  USE SLITHER
