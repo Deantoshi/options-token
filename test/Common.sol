@@ -99,6 +99,7 @@ address constant MODE_VELO_USDC_MODE_PAIR = 0x283bA4E204DFcB6381BCBf2cb5d0e765A2
 address constant MODE_VELO_WETH_MODE_PAIR = 0x0fba984c97539B3fb49ACDA6973288D0EFA903DB;
 address constant MODE_VELO_ROUTER = 0x3a63171DD9BebF4D07BC782FECC7eb0b890C2A45;
 address constant MODE_VELO_FACTORY = 0x31832f2a97Fd20664D76Cc421207669b55CE4BC0;
+address constant MODE_ADDRESS_PROVIDER = 0xEDc83309549e36f3c7FD8c2C5C54B4c8e5FA00FC;
 
 contract Common is Test {
     IERC20 nativeToken;
@@ -139,6 +140,8 @@ contract Common is Test {
     ERC1967Proxy tmpProxy;
     OptionsToken optionsTokenProxy;
     DiscountExercise exerciser;
+
+    uint256 maxUnderlyingAmount;
 
     function fixture_setupAccountsAndFees(uint256 fee1, uint256 fee2) public {
         /* Setup accounts */
