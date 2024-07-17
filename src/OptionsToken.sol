@@ -4,7 +4,7 @@ pragma solidity ^0.8.13;
 import {OwnableUpgradeable} from "oz-upgradeable/access/OwnableUpgradeable.sol";
 import {ERC20Upgradeable} from "oz-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import {UUPSUpgradeable} from "oz-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-
+import {PausableUpgradeable} from "oz-upgradeable/security/PausableUpgradeable.sol";
 import {IOptionsToken} from "./interfaces/IOptionsToken.sol";
 import {IOracle} from "./interfaces/IOracle.sol";
 import {IExercise} from "./interfaces/IExercise.sol";
@@ -13,7 +13,7 @@ import {IExercise} from "./interfaces/IExercise.sol";
 /// @author Eidolon & lookee
 /// @notice Options token representing the right to perform an advantageous action,
 /// such as purchasing the underlying token at a discount to the market price.
-contract OptionsToken is IOptionsToken, ERC20Upgradeable, OwnableUpgradeable, UUPSUpgradeable {
+contract OptionsToken is IOptionsToken, ERC20Upgradeable, OwnableUpgradeable, UUPSUpgradeable, PausableUpgradeable {
     /// -----------------------------------------------------------------------
     /// Errors
     /// -----------------------------------------------------------------------
@@ -61,6 +61,7 @@ contract OptionsToken is IOptionsToken, ERC20Upgradeable, OwnableUpgradeable, UU
         __UUPSUpgradeable_init();
         __ERC20_init(name_, symbol_);
         __Ownable_init();
+        __Pausable_init();
         tokenAdmin = tokenAdmin_;
 
         _clearUpgradeCooldown();
@@ -96,9 +97,14 @@ contract OptionsToken is IOptionsToken, ERC20Upgradeable, OwnableUpgradeable, UU
     /// @param recipient The recipient of the reward
     /// @param option The address of the Exercise contract with the redemption logic
     /// @param params Extra parameters to be used by the exercise function
+    /// @return paymentAmount token amount paid for exercising
+    /// @return data0 address data to return by different exerciser contracts
+    /// @return data1 integer data to return by different exerciser contracts
+    /// @return data2 additional integer data to return by different exerciser contracts
     function exercise(uint256 amount, address recipient, address option, bytes calldata params)
         external
         virtual
+        whenNotPaused
         returns (
             uint256 paymentAmount,
             address,
@@ -119,6 +125,16 @@ contract OptionsToken is IOptionsToken, ERC20Upgradeable, OwnableUpgradeable, UU
     function setExerciseContract(address _address, bool _isExercise) external onlyOwner {
         isExerciseContract[_address] = _isExercise;
         emit SetExerciseContract(_address, _isExercise);
+    }
+
+    /// @notice Pauses functionality related to exercises of contracts.
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    /// @notice Unpauses functionality related to exercises of contracts.
+    function unpause() external onlyOwner {
+        _unpause();
     }
 
     /// -----------------------------------------------------------------------

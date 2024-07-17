@@ -5,7 +5,7 @@ import {Owned} from "solmate/auth/Owned.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 
 import {IOracle} from "../interfaces/IOracle.sol";
-
+import {ERC20} from "solmate/tokens/ERC20.sol";
 import {IUniswapV3Pool} from "v3-core/interfaces/IUniswapV3Pool.sol";
 import {TickMath} from "v3-core/libraries/TickMath.sol";
 import {FullMath} from "v3-core/libraries/FullMath.sol";
@@ -69,6 +69,7 @@ contract UniswapV3Oracle is IOracle, Owned {
     /// -----------------------------------------------------------------------
 
     constructor(IUniswapV3Pool uniswapPool_, address token, address owner_, uint32 secs_, uint32 ago_, uint128 minPrice_) Owned(owner_) {
+        if (ERC20(uniswapPool_.token0()).decimals() != 18 || ERC20(uniswapPool_.token1()).decimals() != 18) revert UniswapOracle__InvalidParams(); //|| ERC20(uniswapPool_.token1()).decimals() != 18
         if (uniswapPool_.token0() != token && uniswapPool_.token1() != token) revert UniswapOracle__InvalidParams();
         if (secs_ < MIN_SECS) revert UniswapOracle__InvalidWindow();
         uniswapPool = uniswapPool_;

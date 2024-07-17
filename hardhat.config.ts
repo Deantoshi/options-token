@@ -9,6 +9,9 @@ import { subtask } from "hardhat/config";
 
 import { config as dotenvConfig } from "dotenv";
 
+// import "@nomiclabs/hardhat-ethers";
+import "@nomicfoundation/hardhat-verify";
+
 dotenvConfig();
 
 const PRIVATE_KEY = process.env.PRIVATE_KEY || "";
@@ -19,6 +22,9 @@ const config: HardhatUserConfig = {
     settings: {
       optimizer: { enabled: true, runs: 9999 }
     }
+  },
+  sourcify: {
+    enabled: true
   },
   paths: {
     sources: "./src",
@@ -35,12 +41,28 @@ const config: HardhatUserConfig = {
       chainId: 56,
       accounts: [`0x${PRIVATE_KEY}`],
     },
+    mode: {
+      url: "https://mainnet.mode.network/",
+      chainId: 34443,
+      accounts: [`0x${PRIVATE_KEY}`],
+    },
   },
   etherscan: {
     apiKey: { 
       bsc: process.env.ETHERSCAN_KEY || "",
-    }
+    },
+    // customChains: [
+    //   {
+    //     network: "mode",
+    //     chainId: 34443,
+    //     urls: {
+    //       apiURL: "https://explorer.mode.network",
+    //       browserURL: "https://explorer.mode.network"
+    //     }
+    //   }
+    // ]
   },
+
 };
 
 subtask(TASK_COMPILE_SOLIDITY_GET_SOURCE_PATHS).setAction(async (_, hre, runSuper) => {

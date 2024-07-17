@@ -53,3 +53,35 @@ forge build
 ```
 forge test
 ```
+
+### Checklist
+
+#### Internal Audit Checklist
+
+- [x]  All functionality that touches funds can be paused
+- [ ]  Pause function called by 2/7 Guardian
+- [ ]  Guardian has 7 members globally dispersed
+- [x]  Arithmetic errors
+- [x]  Re-entrancy
+- [x]  Flashloans
+- [x]  Access Control
+- [x]  Unchecked External Calls
+- [ ]  Account abstraction/multicall issues
+- [x]  USE SLITHER
+
+#### Pre-deployment Checklist
+
+- [x]  Contracts pass all tests
+- [x]  Contracts deployed to testnet
+- [x]  Does this deployment have access to funds, either directly or indirectly (zappers, leveragers, etc.)?
+
+Minimum security if Yes:
+
+- [x]  Internal Audit (not the author, minimum 1x Junior review + minimum 1x Senior review)
+- [x]  External Audit (impact scope)
+
+Action items in support of deployment:
+
+- [ ]  Minimum two people present for deployment
+- [ ]  All developers who worked on and reviewed the contract should be included in the readme
+- [ ]  Documentation of deployment procedure if non-standard (i.e. if multiple scripts are necessary)
