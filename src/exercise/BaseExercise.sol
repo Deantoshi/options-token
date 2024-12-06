@@ -3,10 +3,10 @@ pragma solidity ^0.8.13;
 
 import {IExercise} from "../interfaces/IExercise.sol";
 import {IOptionsToken} from "../OptionsToken.sol";
-import {SafeERC20} from "oz/token/ERC20/utils/SafeERC20.sol";
-import {IERC20} from "oz/token/ERC20/IERC20.sol";
-import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
-import {Owned} from "solmate/auth/Owned.sol";
+import {SafeERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {FixedPointMathLib} from "lib/solmate/src/utils/FixedPointMathLib.sol";
+import {Owned} from "lib/solmate/src/auth/Owned.sol";
 
 abstract contract BaseExercise is IExercise, Owned {
     using SafeERC20 for IERC20;

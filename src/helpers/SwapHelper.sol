@@ -2,9 +2,9 @@
 
 pragma solidity ^0.8.13;
 
-import {ISwapperSwaps, MinAmountOutData, MinAmountOutKind} from "vault-v2/ReaperSwapper.sol";
+import {ISwapperSwaps, MinAmountOutData, MinAmountOutKind} from "lib/vault-v2/src/ReaperSwapper.sol";
 import {IOracle} from "../interfaces/IOracle.sol";
-import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
+import {FixedPointMathLib} from "lib/solmate/src/utils/FixedPointMathLib.sol";
 
 enum ExchangeType {
     UniV2,

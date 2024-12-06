@@ -23,6 +23,10 @@
     "hardhat-contract-sizer": "^2.10.0"
   },
   "dependencies": {
-    "@nomicfoundation/hardhat-network-helpers": "^1.0.10"
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.10",
+    "@openzeppelin/contracts": "^5.1.0",
+    "@openzeppelin/contracts-upgradeable": "^5.1.0",
+    "@rari-capital/solmate": "^6.4.0",
+    "solmate": "github:transmissions11/solmate"
   }
 }

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.13;
 
-import {Owned} from "solmate/auth/Owned.sol";
-import {IERC20} from "oz/token/ERC20/IERC20.sol";
-import {Pausable} from "oz/security/Pausable.sol";
-import {SafeERC20} from "oz/token/ERC20/utils/SafeERC20.sol";
-import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
+import {Owned} from "lib/solmate/src/auth/Owned.sol";
+import {IERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
+import {Pausable} from "lib/openzeppelin-contracts/contracts/security/Pausable.sol";
+import {SafeERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
+import {FixedPointMathLib} from "lib/solmate/src/utils/FixedPointMathLib.sol";
 
 import {BaseExercise} from "../exercise/BaseExercise.sol";
 import {IOracle} from "../interfaces/IOracle.sol";
